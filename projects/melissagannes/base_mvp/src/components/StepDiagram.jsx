@@ -208,6 +208,148 @@ function CatSvg({ step }) {
   )
 }
 
+/** Dog: 7 steps (0–6). Front-facing happy dog. */
+function DogSvg({ step }) {
+  const s = Math.min(step, 6)
+  return (
+    <SvgFrame>
+      {/* Step 0: light guide circle for the head */}
+      {s === 0 && (
+        <circle
+          cx="100"
+          cy="78"
+          r="38"
+          fill="none"
+          stroke="var(--diagram-guide)"
+          strokeWidth="2"
+          strokeDasharray="6 5"
+        />
+      )}
+      {/* Step 1: solid head circle */}
+      {s >= 1 && (
+        <circle
+          cx="100"
+          cy="78"
+          r="38"
+          fill="none"
+          stroke="var(--diagram-stroke)"
+          strokeWidth="3"
+        />
+      )}
+      {/* Step 2: floppy ears */}
+      {s >= 2 && (
+        <>
+          <path
+            d="M 66 68 Q 48 72 46 100 Q 44 116 58 112"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <path
+            d="M 134 68 Q 152 72 154 100 Q 156 116 142 112"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </>
+      )}
+      {/* Step 3: eyes, nose, tongue */}
+      {s >= 3 && (
+        <>
+          <circle cx="86" cy="72" r="5" fill="var(--diagram-stroke)" />
+          <circle cx="114" cy="72" r="5" fill="var(--diagram-stroke)" />
+          <ellipse
+            cx="100"
+            cy="90"
+            rx="8"
+            ry="6"
+            fill="var(--diagram-stroke)"
+          />
+          <path
+            d="M 96 96 Q 100 108 104 96"
+            fill="var(--diagram-accent, #e57373)"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </>
+      )}
+      {/* Step 4: body oval */}
+      {s >= 4 && (
+        <ellipse
+          cx="100"
+          cy="152"
+          rx="44"
+          ry="36"
+          fill="none"
+          stroke="var(--diagram-stroke)"
+          strokeWidth="3"
+        />
+      )}
+      {/* Step 5: four legs with rounded paws */}
+      {s >= 5 && (
+        <>
+          <path
+            d="M 72 174 L 72 192 Q 72 196 78 196 L 82 196"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M 90 176 L 90 192 Q 90 196 96 196 L 100 196"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M 110 176 L 110 192 Q 110 196 116 196 L 120 196"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M 128 174 L 128 192 Q 128 196 134 196 L 138 196"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      )}
+      {/* Step 6: wagging tail + collar */}
+      {s >= 6 && (
+        <>
+          <path
+            d="M 140 130 Q 168 110 172 80"
+            fill="none"
+            stroke="var(--diagram-stroke)"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+          <ellipse
+            cx="100"
+            cy="116"
+            rx="22"
+            ry="5"
+            fill="none"
+            stroke="var(--diagram-accent, #e57373)"
+            strokeWidth="3"
+          />
+        </>
+      )}
+    </SvgFrame>
+  )
+}
+
 /** Car: 6 steps (0–5). Side-view cartoon car. */
 function CarSvg({ step }) {
   const s = Math.min(step, 5)
@@ -491,6 +633,8 @@ export function StepDiagram({ lessonId, stepIndex }) {
   switch (lessonId) {
     case 'cat':
       return <CatSvg step={stepIndex} />
+    case 'dog':
+      return <DogSvg step={stepIndex} />
     case 'simple-car':
       return <CarSvg step={stepIndex} />
     case 'simple-house':

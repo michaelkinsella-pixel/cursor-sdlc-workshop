@@ -62,6 +62,51 @@ export const LESSONS = {
       },
     ],
   },
+  dog: {
+    id: 'dog',
+    categoryId: 'animals',
+    title: 'A happy dog',
+    keywords: [
+      'dog',
+      'puppy',
+      'pup',
+      'pet',
+      'animal',
+      'woof',
+      'bark',
+      'tail',
+    ],
+    steps: [
+      {
+        text:
+          'With a light pencil, draw a big circle for the head—about the size of a tennis ball on your page. Press softly!',
+      },
+      {
+        text:
+          'Trace the same circle a little darker so it is easy to see. This is the dog\u2019s head.',
+      },
+      {
+        text:
+          'On each side of the head, draw a floppy ear that hangs down—like the letter U turned sideways.',
+      },
+      {
+        text:
+          'Add two round eyes, a big oval nose between them, and a little tongue poking out below the nose.',
+      },
+      {
+        text:
+          'Under the head, draw a wide oval for the body—a bit bigger than the head, with a small gap for the neck.',
+      },
+      {
+        text:
+          'Add four short legs: two in front and two in back, like thick rectangles with rounded bottoms for paws.',
+      },
+      {
+        text:
+          'Finish with a wagging tail curving up on one side, and a collar around the neck.',
+      },
+    ],
+  },
   'simple-car': {
     id: 'simple-car',
     categoryId: 'cars',
