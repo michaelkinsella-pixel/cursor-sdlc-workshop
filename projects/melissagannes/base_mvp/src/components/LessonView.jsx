@@ -6,6 +6,7 @@ import {
 import { CategoryPicker } from './CategoryPicker'
 import { LessonSearch } from './LessonSearch'
 import { StepDiagramLoader } from './StepDiagramLoader'
+import { StepHintImage } from './StepHintImage'
 
 export function LessonView() {
   const [categoryId, setCategoryId] = useState('animals')
@@ -49,68 +50,116 @@ export function LessonView() {
   const showCelebration = isLast
 
   return (
-    <div className="lesson-view">
-      <header className="lesson-view__header">
-        <p className="lesson-view__eyebrow">StepDraw Jr</p>
-        <h1 className="lesson-view__title">{lesson.title}</h1>
-      </header>
+    <div className="figma-app">
+      <aside className="figma-sidebar" aria-label="Project and assets">
+        <div className="figma-brand">
+          <span className="figma-brand__mark" aria-hidden />
+          <span className="figma-brand__text">StepDraw Jr</span>
+        </div>
 
-      <LessonSearch
-        activeLessonId={lessonId}
-        onPickLesson={handlePickLesson}
-      />
+        <p className="figma-sidebar__label">Find</p>
+        <LessonSearch
+          compact
+          activeLessonId={lessonId}
+          onPickLesson={handlePickLesson}
+        />
 
-      <CategoryPicker
-        activeCategoryId={categoryId}
-        onSelect={handleCategory}
-      />
+        <p className="figma-sidebar__label">Categories</p>
+        <CategoryPicker
+          activeCategoryId={categoryId}
+          onSelect={handleCategory}
+        />
+      </aside>
 
-      <div className="lesson-view__diagram">
-        <StepDiagramLoader
-          key={`${lessonId}-${stepIndex}`}
+      <section className="figma-canvas-column" aria-label="Canvas">
+        <header className="figma-canvas-toolbar">
+          <span className="figma-canvas-toolbar__title">{lesson.title}</span>
+          <span className="figma-canvas-toolbar__meta">
+            Step {stepIndex + 1} / {totalSteps}
+          </span>
+        </header>
+
+        <div className="figma-canvas">
+          <div className="figma-frame">
+            <div className="figma-frame__inner">
+              <StepDiagramLoader
+                key={`${lessonId}-${stepIndex}`}
+                lessonId={lessonId}
+                stepIndex={stepIndex}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside className="figma-panel" aria-label="Instructions">
+        <p className="figma-panel__section">Instructions</p>
+        <StepHintImage
+          key={`hint-${lessonId}-${stepIndex}`}
           lessonId={lessonId}
           stepIndex={stepIndex}
+          step={step}
         />
-      </div>
-
-      <p className="lesson-view__step-label">
-        Step {stepIndex + 1} of {totalSteps}
-      </p>
-      <p className="lesson-view__instruction">{step.text}</p>
-
-      {showCelebration && (
-        <p className="lesson-view__celebration" role="status">
-          You did it! Great drawing!
-        </p>
-      )}
-
-      <div className="lesson-view__nav">
-        <button
-          type="button"
-          className="lesson-view__btn lesson-view__btn--secondary"
-          onClick={goBack}
-          disabled={stepIndex === 0}
+        <div
+          className="figma-step-dots"
+          role="group"
+          aria-label="Steps; click a dot to jump"
         >
-          Back
-        </button>
-        {isLast ? (
-          <button
-            type="button"
-            className="lesson-view__btn lesson-view__btn--primary"
-            onClick={restart}
-          >
-            Draw again
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="lesson-view__btn lesson-view__btn--primary"
-            onClick={goNext}
-          >
-            Next
-          </button>
+          {lesson.steps.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={
+                'figma-step-dots__dot' +
+                (i === stepIndex ? ' figma-step-dots__dot--active' : '') +
+                (i < stepIndex ? ' figma-step-dots__dot--done' : '')
+              }
+              aria-label={`Step ${i + 1}${i === stepIndex ? ' (current)' : ''}`}
+              aria-current={i === stepIndex ? 'true' : undefined}
+              onClick={() => setStepIndex(i)}
+            />
+          ))}
+        </div>
+
+        <p className="figma-panel__step-num">
+          Step {stepIndex + 1} of {totalSteps}
+        </p>
+        <p className="figma-panel__instruction">{step.text}</p>
+
+        {showCelebration && (
+          <p className="figma-panel__celebration" role="status">
+            You did it! Great drawing!
+          </p>
         )}
-      </div>
+
+        <div className="figma-panel__nav">
+          <button
+            type="button"
+            className="figma-btn figma-btn--ghost"
+            onClick={goBack}
+            disabled={stepIndex === 0}
+          >
+            Back
+          </button>
+          {isLast ? (
+            <button
+              type="button"
+              className="figma-btn figma-btn--primary"
+              onClick={restart}
+            >
+              Draw again
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="figma-btn figma-btn--primary"
+              onClick={goNext}
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </aside>
     </div>
   )
 }

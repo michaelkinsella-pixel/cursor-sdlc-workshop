@@ -5,22 +5,29 @@ function categoryEmoji(categoryId) {
   return CATEGORIES.find((c) => c.id === categoryId)?.emoji ?? '🎨'
 }
 
-export function LessonSearch({ activeLessonId, onPickLesson }) {
+export function LessonSearch({ activeLessonId, onPickLesson, compact = false }) {
   const [query, setQuery] = useState('')
 
   const matches = useMemo(() => searchLessons(query), [query])
 
   return (
     <section
-      className="lesson-search"
+      className={'lesson-search' + (compact ? ' lesson-search--compact' : '')}
       aria-labelledby="lesson-search-heading"
     >
-      <h2 id="lesson-search-heading" className="lesson-search__title">
+      <h2
+        id="lesson-search-heading"
+        className={
+          compact ? 'lesson-search__sr-only' : 'lesson-search__title'
+        }
+      >
         Find something to draw
       </h2>
-      <p className="lesson-search__hint">
-        Type a word or tap a picture below.
-      </p>
+      {!compact && (
+        <p className="lesson-search__hint">
+          Type a word or tap a picture below.
+        </p>
+      )}
 
       <label className="lesson-search__label" htmlFor="draw-search">
         Search drawings

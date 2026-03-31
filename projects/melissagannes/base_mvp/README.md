@@ -25,6 +25,8 @@ Open the URL Vite prints (often `http://localhost:5173`).
 | `src/components/StepDiagramLoader.jsx` | Loads `public/steps/<lessonId>/<n>.svg` when present |
 | `public/steps/` | Optional Figma/Illustrator exports (see `public/steps/README.md`) |
 | `../docs/image-sources.md` | PD/CC0 reference log |
+| `public/images/hints/` | Optional per-step reference images (see `README` there) |
+| `src/components/StepHintImage.jsx` | Shows hint image in the instructions panel |
 | `src/components/LessonView.jsx` | Steps, Back / Next / Draw again |
 
 ## Workshop

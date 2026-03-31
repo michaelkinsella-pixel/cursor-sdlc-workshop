@@ -45,6 +45,8 @@ Each lesson uses **progressive SVG** diagrams (each step adds to the picture). T
 
 Optional **Figma / Illustrator** exports: drop files at `base_mvp/public/steps/<lessonId>/<stepIndex>.svg` (e.g. [`public/steps/cat/0.svg`](projects/melissagannes/base_mvp/public/steps/cat/0.svg)). The app loads them via [`StepDiagramLoader.jsx`](projects/melissagannes/base_mvp/src/components/StepDiagramLoader.jsx); if a file is missing, it falls back to inline [`StepDiagram.jsx`](projects/melissagannes/base_mvp/src/components/StepDiagram.jsx). Log PD/CC0 references in [`docs/image-sources.md`](projects/melissagannes/docs/image-sources.md).
 
+**Step hint images** (optional reference photos or art in the right panel): put files under [`base_mvp/public/images/hints/<lessonId>/`](projects/melissagannes/base_mvp/public/images/hints/README.md) as `<stepIndex>.svg` (or `.png` / `.jpg`), or set `hintImage` on a step in `lessons.js`. Loaded by [`StepHintImage.jsx`](projects/melissagannes/base_mvp/src/components/StepHintImage.jsx); if nothing loads, the hint block is omitted.
+
 ### Search: “Find something to draw”
 - Search box filters lessons by **title**, **keyword** lists (e.g. cat, kitty, car, house), and **words inside step instructions** (e.g. whisker, pencil).
 - **Empty search** lists all lessons so kids can tap without typing.
@@ -70,6 +72,7 @@ Optional **Figma / Illustrator** exports: drop files at `base_mvp/public/steps/<
 | Step diagrams (inline SVG) | `base_mvp/src/components/StepDiagram.jsx` |
 | Optional per-step SVG files (public folder) | `base_mvp/public/steps/<lessonId>/<n>.svg`, loaded by `StepDiagramLoader.jsx` |
 | Reference / license log | `docs/image-sources.md` |
+| Step hint images (panel) | `base_mvp/src/components/StepHintImage.jsx`, `public/images/hints/` |
 | Main screen logic | `base_mvp/src/components/LessonView.jsx` |
 | App shell | `base_mvp/src/App.jsx`, `App.css`, `index.css` |
 

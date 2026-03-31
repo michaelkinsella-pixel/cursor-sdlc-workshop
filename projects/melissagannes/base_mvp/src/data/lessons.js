@@ -1,5 +1,8 @@
 /**
  * Workshop lessons: see strokeOrders.md for north-star stroke order per drawing.
+ *
+ * Each step: `{ text: string, hintImage?: string }` — optional `hintImage` is a
+ * URL under `public/` (e.g. `/images/hints/simple-car/2.png`) for a reference picture.
  */
 
 export const CATEGORIES = [
