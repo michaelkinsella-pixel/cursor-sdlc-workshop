@@ -10,14 +10,19 @@
         --panel: #161b26;
         --panel-border: rgba(232, 234, 242, 0.12);
         --text: #e8eaf2;
-        --muted: rgba(232, 234, 242, 0.65);
-        --accent: #7cb7ff;
+        --muted: rgba(232, 234, 242, 0.62);
+        --accent: #8ec5ff;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
       }
       body {
         margin: 0;
         background: radial-gradient(ellipse 120% 80% at 50% -20%, #1a2744 0%, var(--bg) 55%);
         color: var(--text);
-        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-family: var(--font-sans);
+        font-size: 15px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
         min-height: 100vh;
         display: flex;
         justify-content: center;
@@ -53,57 +58,179 @@
         margin: 0;
       }
       .scoreboard {
-        width: 220px;
-        min-height: 200px;
-        padding: 16px 18px;
+        width: 280px;
+        padding: 20px 20px 18px;
         background: var(--panel);
         border: 1px solid var(--panel-border);
-        border-radius: 10px;
+        border-radius: 12px;
         box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
       }
-      .scoreboard h2 {
-        margin: 0 0 12px;
-        font-size: 13px;
+      .scoreboard-section-title {
+        margin: 0 0 10px;
+        font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
       }
-      .stat {
-        font-size: 15px;
-        margin-bottom: 8px;
+      .leaderboard-block {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--panel-border);
+      }
+      .leaderboard-block .scoreboard-section-title {
+        margin-bottom: 12px;
+      }
+      .lb-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .lb-row {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 10px 12px;
+        align-items: start;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(232, 234, 242, 0.06);
+        font-size: 13px;
         line-height: 1.35;
       }
-      .stat span {
-        color: var(--accent);
-        font-variant-numeric: tabular-nums;
+      .lb-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
       }
-      .scoreboard h3 {
-        margin: 16px 0 8px;
-        font-size: 12px;
+      .lb-row:first-child {
+        padding-top: 2px;
+      }
+      .lb-row--empty {
+        color: var(--muted);
+        opacity: 0.45;
+        font-size: 13px;
+        grid-template-columns: 1fr;
+        padding: 8px 0;
+      }
+      .lb-rank {
+        font-size: 11px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        padding-top: 2px;
+        letter-spacing: 0.02em;
+      }
+      .lb-body {
+        min-width: 0;
+      }
+      .lb-line1 {
+        margin-bottom: 4px;
+      }
+      .lb-name {
+        display: block;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--accent);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+        line-height: 1.25;
+      }
+      .lb-line2 {
+        font-size: 13px;
         font-weight: 600;
-        letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        opacity: 0.88;
+      }
+      .lb-line2 span {
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 12px;
+      }
+      .status {
+        margin: 18px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid var(--panel-border);
+        font-size: 13px;
+        line-height: 1.5;
+        font-weight: 500;
+        color: var(--accent);
+        min-height: 3.2em;
+      }
+      .player-setup {
+        margin-bottom: 4px;
+      }
+      .player-setup label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .player-setup input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-family: inherit;
+        border-radius: 8px;
+        border: 1px solid var(--panel-border);
+        background: rgba(0, 0, 0, 0.28);
+        color: var(--text);
+      }
+      .player-setup input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .player-playing {
+        font-size: 14px;
+        line-height: 1.45;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--panel-border);
+      }
+      .player-playing strong {
+        color: var(--accent);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      #player-attempt-line {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .player-summary {
+        margin-bottom: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--panel-border);
+      }
+      .player-summary-title {
+        margin: 0 0 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
       }
-      .scoreboard ol {
+      .player-summary-body {
         margin: 0;
-        padding-left: 1.25rem;
-        font-size: 14px;
-        line-height: 1.55;
-        color: var(--text);
-      }
-      .scoreboard li.empty {
-        color: var(--muted);
-      }
-      .status {
-        margin: 16px 0 0;
-        padding-top: 14px;
-        border-top: 1px solid var(--panel-border);
         font-size: 14px;
         line-height: 1.45;
+        color: var(--text);
+      }
+      .player-summary-body strong {
         color: var(--accent);
-        min-height: 2.8em;
+        font-weight: 600;
+      }
+      .hidden {
+        display: none !important;
       }
     </style>
   </head>
@@ -111,15 +238,34 @@
     <div class="layout">
       <div class="game-column">
         <canvas id="game" width="480" height="360" tabindex="0" aria-label="Brick Breaker"></canvas>
-        <p class="hint">← → or A D · Space start/restart · mouse moves paddle</p>
+        <p class="hint">
+          Name yourself in the panel (you can rename after each game) · ← → or A D · Space or Enter · mouse
+        </p>
       </div>
       <aside class="scoreboard" aria-label="Scoreboard">
-        <h2>Session</h2>
-        <div class="stat">Score: <span id="hud-score">—</span></div>
-        <div class="stat">Try: <span id="hud-try">—</span></div>
-        <div class="stat">Next try: <span id="hud-next">—</span></div>
-        <h3>Top 5 (score @ try)</h3>
-        <ol id="hud-top" aria-live="polite"></ol>
+        <div class="player-summary hidden" id="player-summary" aria-live="polite">
+          <p class="player-summary-title">Last game</p>
+          <p class="player-summary-body" id="player-summary-body"></p>
+        </div>
+        <div class="player-setup" id="player-setup">
+          <label for="player-name" id="player-name-label">Your name</label>
+          <input
+            type="text"
+            id="player-name"
+            maxlength="24"
+            placeholder="Enter name, then Space or Enter"
+            autocomplete="username"
+            spellcheck="false"
+          />
+        </div>
+        <div class="player-playing hidden" id="player-playing" aria-live="polite">
+          Playing as <strong id="player-display-name">—</strong><br />
+          <span id="player-attempt-line">Attempt <span id="player-attempt">—</span></span>
+        </div>
+        <div class="leaderboard-block">
+          <h3 class="scoreboard-section-title">Leaderboard</h3>
+          <div id="hud-top" class="lb-list" role="list" aria-live="polite"></div>
+        </div>
         <p id="hud-status" class="status" aria-live="polite">Press Space to Start</p>
       </aside>
     </div>
@@ -150,26 +296,38 @@
         const LS_TOP = "brickBreaker_top5";
         const LS_TRY = "brickBreaker_gameTry";
 
-        /** @type {{ score: number; try: number }[]} */
+        /** @type {{ score: number; try: number; name: string; attempt: number }[]} */
         let topScores = [];
         /** Games ever started (persisted); current round try equals this value while playing. */
         let gameTry = 0;
         let currentGameTry = 0;
 
+        let playerName = "";
+        /** Runs with this name this session (1 = first game, 2 = first replay, …). */
+        let sessionAttempt = 0;
+        let currentGameAttempt = 0;
+
         let mode = "ready";
         let score = 0;
         const keys = { left: false, right: false };
+
+        function normalizeScoreEntry(e) {
+          if (!e || typeof e.score !== "number" || typeof e.try !== "number") return null;
+          return {
+            score: e.score,
+            try: e.try,
+            name: typeof e.name === "string" && e.name.trim().length ? e.name.trim().slice(0, 24) : "Player",
+            attempt: typeof e.attempt === "number" && e.attempt >= 1 ? e.attempt : 1,
+          };
+        }
 
         function loadTopScores() {
           try {
             const raw = localStorage.getItem(LS_TOP);
             if (!raw) return [];
             const parsed = JSON.parse(raw);
-            return Array.isArray(parsed)
-              ? parsed
-                  .filter((e) => e && typeof e.score === "number" && typeof e.try === "number")
-                  .slice(0, 5)
-              : [];
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map(normalizeScoreEntry).filter(Boolean).slice(0, 5);
           } catch {
             return [];
           }
@@ -190,8 +348,16 @@
           gameTry = n;
         }
 
-        function recordHighScore(finalScore, tryNum) {
-          const merged = [...topScores, { score: finalScore, try: tryNum }];
+        function recordHighScore(finalScore, tryNum, name, attemptNum) {
+          const merged = [
+            ...topScores,
+            {
+              score: finalScore,
+              try: tryNum,
+              name: (name && name.trim()) || "Player",
+              attempt: attemptNum >= 1 ? attemptNum : 1,
+            },
+          ];
           merged.sort((a, b) => b.score - a.score || b.try - a.try);
           saveTopScores(merged.slice(0, 5));
         }
@@ -237,14 +403,35 @@
           ball.vy = (ball.vy / m) * BALL_SPEED;
         }
 
+        function getPlayerNameFromInput() {
+          const el = document.getElementById("player-name");
+          const v = (el && el.value) ? el.value.trim() : "";
+          return v.length ? v.slice(0, 24) : "Player";
+        }
+
         function startOrRestart() {
+          const nextName = getPlayerNameFromInput();
+          if (mode === "ready") {
+            playerName = nextName;
+            sessionAttempt = 1;
+          } else if (mode === "won" || mode === "lost") {
+            const prevName = playerName;
+            playerName = nextName;
+            if (nextName !== prevName) {
+              sessionAttempt = 1;
+            } else {
+              sessionAttempt += 1;
+            }
+          }
           gameTry += 1;
           saveGameTry(gameTry);
           currentGameTry = gameTry;
+          currentGameAttempt = sessionAttempt;
           buildBricks();
           score = 0;
           mode = "playing";
           resetPositions();
+          canvas.focus();
         }
 
         function clampPaddle() {
@@ -325,55 +512,123 @@
             if (brickHit(bricks[i])) break;
           }
           if (aliveCount() === 0) {
-            recordHighScore(score, currentGameTry);
+            recordHighScore(score, currentGameTry, playerName, currentGameAttempt);
             mode = "won";
             return;
           }
           if (ball.y - ball.r > H) {
-            recordHighScore(score, currentGameTry);
+            recordHighScore(score, currentGameTry, playerName, currentGameAttempt);
             mode = "lost";
           }
         }
 
-        const elScore = document.getElementById("hud-score");
-        const elTry = document.getElementById("hud-try");
-        const elNext = document.getElementById("hud-next");
         const elTop = document.getElementById("hud-top");
         const elStatus = document.getElementById("hud-status");
+        const elPlayerSetup = document.getElementById("player-setup");
+        const elPlayerPlaying = document.getElementById("player-playing");
+        const elPlayerSummary = document.getElementById("player-summary");
+        const elSummaryBody = document.getElementById("player-summary-body");
+        const elPlayerDisplayName = document.getElementById("player-display-name");
+        const elPlayerAttempt = document.getElementById("player-attempt");
+        const elNameLabel = document.getElementById("player-name-label");
+        const elNameInput = document.getElementById("player-name");
+
+        let lastHudMode = "ready";
 
         function updateHud() {
-          const nextTry = gameTry + 1;
-          if (mode === "playing") {
-            elScore.textContent = String(score);
-            elTry.textContent = String(currentGameTry);
-            elNext.textContent = String(nextTry);
-          } else if (mode === "ready") {
-            elScore.textContent = "—";
-            elTry.textContent = "—";
-            elNext.textContent = String(nextTry);
+          if (mode === "ready") {
+            elPlayerSummary.classList.add("hidden");
+            elPlayerSetup.classList.remove("hidden");
+            elPlayerPlaying.classList.add("hidden");
+            elNameLabel.textContent = "Your name";
+            elNameInput.placeholder = "Enter name, then Space or Enter";
+          } else if (mode === "playing") {
+            elPlayerSummary.classList.add("hidden");
+            elPlayerSetup.classList.add("hidden");
+            elPlayerPlaying.classList.remove("hidden");
+            elPlayerDisplayName.textContent = playerName || "Player";
+            elPlayerAttempt.textContent = String(currentGameAttempt);
           } else {
-            elScore.textContent = String(score);
-            elTry.textContent = String(currentGameTry);
-            elNext.textContent = String(nextTry);
+            elPlayerSummary.classList.remove("hidden");
+            elPlayerSetup.classList.remove("hidden");
+            elPlayerPlaying.classList.add("hidden");
+            elNameLabel.textContent = "Name for next game";
+            elNameInput.placeholder = "Keep or change your name — Space or Enter";
+            elSummaryBody.replaceChildren();
+            elSummaryBody.appendChild(document.createTextNode("Played as "));
+            const nameStrong = document.createElement("strong");
+            nameStrong.textContent = playerName || "Player";
+            elSummaryBody.appendChild(nameStrong);
+            elSummaryBody.appendChild(
+              document.createTextNode(
+                " · Attempt " + currentGameAttempt + " · Score " + score
+              )
+            );
+            if (lastHudMode === "playing") {
+              elNameInput.value = playerName;
+              requestAnimationFrame(function () {
+                elNameInput.focus();
+              });
+            }
           }
 
           elTop.replaceChildren();
           for (let i = 0; i < 5; i++) {
-            const li = document.createElement("li");
             const entry = topScores[i];
             if (entry) {
-              li.textContent = entry.score + " @ try " + entry.try;
+              const row = document.createElement("div");
+              row.className = "lb-row";
+              row.setAttribute("role", "listitem");
+
+              const rank = document.createElement("span");
+              rank.className = "lb-rank";
+              rank.textContent = String(i + 1);
+
+              const body = document.createElement("div");
+              body.className = "lb-body";
+
+              const line1 = document.createElement("div");
+              line1.className = "lb-line1";
+              const nm = document.createElement("span");
+              nm.className = "lb-name";
+              nm.textContent = entry.name;
+
+              const line2 = document.createElement("div");
+              line2.className = "lb-line2";
+              line2.appendChild(document.createTextNode(String(entry.score) + " "));
+              const pts = document.createElement("span");
+              pts.textContent = "pts";
+              line2.appendChild(pts);
+
+              line1.appendChild(nm);
+
+              body.appendChild(line1);
+              body.appendChild(line2);
+              row.appendChild(rank);
+              row.appendChild(body);
+              elTop.appendChild(row);
             } else {
-              li.textContent = "—";
-              li.className = "empty";
+              const empty = document.createElement("div");
+              empty.className = "lb-row lb-row--empty";
+              empty.setAttribute("role", "listitem");
+              empty.textContent = "—";
+              elTop.appendChild(empty);
             }
-            elTop.appendChild(li);
           }
 
-          if (mode === "ready") elStatus.textContent = "Press Space to Start";
-          else if (mode === "won") elStatus.textContent = "You Win — Press Space to Restart";
-          else if (mode === "lost") elStatus.textContent = "Game Over — Press Space to Restart";
-          else elStatus.textContent = "Clear all bricks!";
+          if (mode === "ready") {
+            elStatus.textContent = "Enter your name · Space or Enter to start";
+          } else if (mode === "won") {
+            elStatus.textContent =
+              "You Win — edit name if you want, then Space or Enter for the next game";
+          } else if (mode === "lost") {
+            elStatus.textContent =
+              "Game Over — edit name if you want, then Space or Enter for the next game";
+          } else {
+            elStatus.textContent = "Clear all bricks!";
+          }
+
+          lastHudMode = mode;
         }
 
         function draw() {
@@ -403,13 +658,15 @@
         }
 
         window.addEventListener("keydown", (e) => {
+          const canStartOrRestart = mode === "ready" || mode === "won" || mode === "lost";
+          if ((e.code === "Space" || e.code === "Enter") && canStartOrRestart) {
+            e.preventDefault();
+            startOrRestart();
+            return;
+          }
+          if (mode !== "playing") return;
           if (e.code === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = true;
           if (e.code === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = true;
-          if (e.code === "Space" || e.key === " ") {
-            e.preventDefault();
-            if (mode === "ready") startOrRestart();
-            else if (mode === "won" || mode === "lost") startOrRestart();
-          }
         });
         window.addEventListener("keyup", (e) => {
           if (e.code === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = false;
@@ -426,7 +683,7 @@
 
         buildBricks();
         resetPositions();
-        canvas.focus();
+        elNameInput.focus();
         requestAnimationFrame(loop);
       })();
     </script>
