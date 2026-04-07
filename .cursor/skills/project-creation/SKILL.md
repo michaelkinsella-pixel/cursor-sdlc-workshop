@@ -15,7 +15,7 @@ Activate whenever the user asks to:
 ## Source of truth
 
 - Follow `projects/README.md` (this repo) for the expected workshop folder shape.
-- **Active** participant work lives at `projects/<github-username>/` (created from `projects/project_template/`). **Retired** or archived cohort trees may live under `projects/_archive/<github-username>/`; do not copy from `_archive/` as a template—always use `project_template/`.
+- **Active** participant work lives at `projects/<github-username>/` (created from `projects/project_template/`). **Retired** workshop trees are kept under `archive/projects/<github-username>/` (repo root `archive/`, not under `projects/`). Do not copy from `archive/projects/` as a template—always use `project_template/`.
 
 ## Create or repair `projects/<github-username>/` (template-driven)
 
