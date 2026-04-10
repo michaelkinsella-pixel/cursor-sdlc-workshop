@@ -29,12 +29,30 @@ const SlideTestDeepDive = () => (
             <span className="dq-text">"How long does your CI pipeline take to run? Does it slow down shipping?"</span>
           </div>
         </div>
+      </div>
 
-        <h3 style={{ color: 'var(--red)', marginTop: '0.75rem' }}>Common Pain Points</h3>
+      <div className="deepdive-col" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginBottom: '1rem',
+          padding: '0.5rem 0.75rem',
+          background: 'linear-gradient(135deg, rgba(220, 50, 47, 0.06), rgba(220, 50, 47, 0.02))',
+          border: '1px solid rgba(220, 50, 47, 0.15)',
+          borderRadius: '8px',
+        }}>
+          <span style={{ fontSize: '1.5rem', opacity: 0.6 }}>→</span>
+          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--red)' }}>
+            These questions surface the same pain points every time
+          </span>
+        </div>
+
+        <h3 style={{ color: 'var(--red)', marginTop: '0' }}>Common Pain Points</h3>
         <div className="pain-list">
           <div className="pain-item">
             <span className="pain-icon">📉</span>
-            <span className="pain-text"><strong>Low test coverage</strong> — writing tests is tedious, so it gets skipped under deadline pressure. Coverage stays at 20-40%.</span>
+            <span className="pain-text"><strong>Low test coverage</strong> — writing tests is tedious, so it gets skipped under deadline pressure. Coverage stays at 20–40%.</span>
           </div>
           <div className="pain-item">
             <span className="pain-icon">🧪</span>
@@ -42,48 +60,11 @@ const SlideTestDeepDive = () => (
           </div>
           <div className="pain-item">
             <span className="pain-icon">⏱️</span>
-            <span className="pain-text"><strong>Slow CI feedback</strong> — 30-60 min pipelines mean devs context-switch away and come back to failures they've already forgotten.</span>
+            <span className="pain-text"><strong>Slow CI feedback</strong> — 30–60 min pipelines mean devs context-switch away and come back to failures they've already forgotten.</span>
           </div>
-        </div>
-      </div>
-
-      <div className="deepdive-col">
-        <h3 style={{ color: 'var(--orange)' }}>How Cursor Helps</h3>
-        <div className="solution-card" style={{ borderColor: 'rgba(203, 75, 22, 0.2)', background: 'linear-gradient(135deg, rgba(203, 75, 22, 0.08), rgba(203, 75, 22, 0.02))' }}>
-          <div className="solution-header">
-            <span className="solution-icon">🧪</span>
-            <span className="solution-title" style={{ color: 'var(--orange)' }}>AI-Generated Tests + Inline Fixing</span>
-          </div>
-          <div className="solution-steps">
-            <div className="solution-step">
-              <span className="step-num" style={{ background: 'var(--orange)' }}>1</span>
-              <span>Cursor generates meaningful tests alongside feature code — unit, integration, and edge-case tests based on actual implementation</span>
-            </div>
-            <div className="solution-step">
-              <span className="step-num" style={{ background: 'var(--orange)' }}>2</span>
-              <span>When tests fail, Cursor reads the failure output and fixes the code or the test — right in the IDE, no context-switching</span>
-            </div>
-            <div className="solution-step">
-              <span className="step-num" style={{ background: 'var(--orange)' }}>3</span>
-              <span>Background Agents can be tasked with improving test coverage across an entire module while you work on other things</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="competitor-row">
-          <span className="competitor-label">Tools today</span>
-          <div className="tool-pills">
-            <span className="tool-pill">GitHub Actions</span>
-            <span className="tool-pill">Jenkins</span>
-            <span className="tool-pill">CircleCI</span>
-            <span className="tool-pill">Selenium</span>
-          </div>
-        </div>
-
-        <div className="outcome-callout" style={{ background: 'linear-gradient(135deg, rgba(203, 75, 22, 0.1), rgba(203, 75, 22, 0.03))', borderColor: 'rgba(203, 75, 22, 0.25)' }}>
-          <div className="outcome-label" style={{ color: 'var(--orange)' }}>Outcome</div>
-          <div className="outcome-text">
-            Testing goes from <strong style={{ color: 'var(--orange)' }}>a chore that gets skipped</strong> to something that happens automatically with every feature — coverage goes up without slowing teams down
+          <div className="pain-item">
+            <span className="pain-icon">🚀</span>
+            <span className="pain-text"><strong>Ship-it culture wins</strong> — when the choice is "write tests or hit the deadline," tests lose every time. The debt compounds silently.</span>
           </div>
         </div>
       </div>

@@ -2,13 +2,26 @@ import Slide01Title from './Slide01Title.jsx'
 import Slide02Purpose from './Slide02Purpose.jsx'
 import Slide03Agenda from './Slide03Agenda.jsx'
 import Slide04SdlcOverview from './Slide04SdlcOverview.jsx'
+import {
+  SdlcHighlightPlan,
+  SdlcHighlightDesign,
+  SdlcHighlightDevelop,
+  SdlcHighlightTest,
+  SdlcHighlightReview,
+  SdlcHighlightDeploy,
+} from './SlideSdlcHighlight.jsx'
 import SlidePlanDeepDive from './SlidePlanDeepDive.jsx'
 import SlidePlanVideo from './SlidePlanVideo.jsx'
 import SlideDesignDeepDive from './SlideDesignDeepDive.jsx'
+import SlideDesignSystemFull from './SlideDesignSystemFull.jsx'
+import SlideDesignSystem from './SlideDesignSystem.jsx'
 import SlideDesignVideo from './SlideDesignVideo.jsx'
+import SlideDesignCursorHelps from './SlideDesignCursorHelps.jsx'
 import SlideDevelopDeepDive from './SlideDevelopDeepDive.jsx'
 import SlideDevelopVideo from './SlideDevelopVideo.jsx'
 import SlideTestDeepDive from './SlideTestDeepDive.jsx'
+import SlideTestAnalogy from './SlideTestAnalogy.jsx'
+import SlideTestCursorHelps from './SlideTestCursorHelps.jsx'
 import SlideReviewDeepDive from './SlideReviewDeepDive.jsx'
 import SlideDeployDeepDive from './SlideDeployDeepDive.jsx'
 import Slide05PreWork from './Slide05PreWork.jsx'
@@ -43,24 +56,35 @@ export const slides = [
   { id: 4, component: Slide04SdlcOverview },
 
   // SDLC deep-dive: Plan
+  { id: 4.01, component: SdlcHighlightPlan },
   { id: 4.1, component: SlidePlanDeepDive },
   { id: 4.11, component: SlidePlanVideo },
 
   // SDLC deep-dive: Design
+  { id: 4.19, component: SdlcHighlightDesign },
   { id: 4.2, component: SlideDesignDeepDive },
-  { id: 4.21, component: SlideDesignVideo },
+  { id: 4.21, component: SlideDesignSystemFull },
+  { id: 4.22, component: SlideDesignSystem },
+  { id: 4.23, component: SlideDesignVideo },
+  { id: 4.24, component: SlideDesignCursorHelps },
 
   // SDLC deep-dive: Develop
+  { id: 4.29, component: SdlcHighlightDevelop },
   { id: 4.3, component: SlideDevelopDeepDive },
   { id: 4.31, component: SlideDevelopVideo },
 
   // SDLC deep-dive: Test
+  { id: 4.39, component: SdlcHighlightTest },
   { id: 4.4, component: SlideTestDeepDive },
+  { id: 4.41, component: SlideTestAnalogy },
+  { id: 4.42, component: SlideTestCursorHelps },
 
   // SDLC deep-dive: Review
+  { id: 4.49, component: SdlcHighlightReview },
   { id: 4.5, component: SlideReviewDeepDive },
 
   // SDLC deep-dive: Deploy
+  { id: 4.59, component: SdlcHighlightDeploy },
   { id: 4.6, component: SlideDeployDeepDive },
 
   { id: 5, component: SlideGitWorkflowDiagram },
