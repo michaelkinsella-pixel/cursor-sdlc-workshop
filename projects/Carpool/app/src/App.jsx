@@ -186,7 +186,7 @@ export default function App() {
                 background: p.id === currentParent?.id ? 'var(--green-100)' : 'transparent',
               }}
             >
-              <Avatar name={p.name} color={p.avatar_color} size="sm" />
+              <Avatar name={p.name} color={p.avatar_color} photo={p.photo} size="sm" />
               <span>{p.name}</span>
             </button>
           ))}

@@ -50,7 +50,7 @@ export function InviteLanding({ inviteCode, ctx }) {
         {admin && (
           <div className="card">
             <div className="row">
-              <Avatar name={admin.name} color={admin.avatar_color} size="lg" />
+              <Avatar name={admin.name} color={admin.avatar_color} photo={admin.photo} size="lg" />
               <div style={{ flex: 1 }}>
                 <div className="muted" style={{ fontSize: 12 }}>Invited by</div>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{admin.name}</div>
@@ -86,7 +86,7 @@ export function InviteLanding({ inviteCode, ctx }) {
           <div style={{ marginTop: 8 }}>
             {members.map((m) => (
               <div key={m.id} className="list-row">
-                <Avatar name={m.name} color={m.avatar_color} size="sm" />
+                <Avatar name={m.name} color={m.avatar_color} photo={m.photo} size="sm" />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</div>
                 </div>

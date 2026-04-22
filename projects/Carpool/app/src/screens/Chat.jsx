@@ -124,7 +124,7 @@ export function Chat({ teamId, ctx }) {
                 flexDirection: mine ? 'row-reverse' : 'row',
               }}
             >
-              {!mine && <Avatar name={author?.name || '?'} color={author?.avatar_color} size="sm" />}
+              {!mine && <Avatar name={author?.name || '?'} color={author?.avatar_color} photo={author?.photo} size="sm" />}
               <div style={{ maxWidth: '75%' }}>
                 {!mine && (
                   <div className="muted" style={{ fontSize: 11, marginLeft: 4, marginBottom: 2 }}>

@@ -194,7 +194,7 @@ export function CreateCarpool({ ctx }) {
                     fontWeight: 600,
                   }}
                 >
-                  <Avatar name={k.name} color={k.avatar_color} size="sm" />
+                  <Avatar name={k.name} color={k.avatar_color} photo={k.photo} size="sm" />
                   {k.name}
                   {on && <span style={{ marginLeft: 4 }}>✓</span>}
                 </button>
@@ -295,7 +295,7 @@ export function CreateCarpool({ ctx }) {
                       >
                         {on ? '✓' : ''}
                       </button>
-                      <Avatar name={p.name} color={p.avatar_color} size="sm" />
+                      <Avatar name={p.name} color={p.avatar_color} photo={p.photo} size="sm" />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
                         <div className="muted" style={{ fontSize: 11 }}>{p.phone}</div>

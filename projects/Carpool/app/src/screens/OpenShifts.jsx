@@ -476,7 +476,7 @@ function SeatCard({ leg, ctx, rows, onAdd }) {
       </div>
       {driver && (
         <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 12 }}>
-          <Avatar name={driver.name} color={driver.avatar_color} size="sm" />
+          <Avatar name={driver.name} color={driver.avatar_color} photo={driver.photo} size="sm" />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{driver.name} is driving</div>
             <div className="muted" style={{ fontSize: 12 }}>
@@ -497,7 +497,7 @@ function SeatCard({ leg, ctx, rows, onAdd }) {
             }}
           >
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <Avatar name={r.kid.name} color={r.kid.avatar_color} size="sm" />
+              <Avatar name={r.kid.name} color={r.kid.avatar_color} photo={r.kid.photo} size="sm" />
               <span style={{ fontWeight: 700, fontSize: 14 }}>{r.kid.name}</span>
             </div>
             <button
@@ -568,7 +568,7 @@ function KidStrip({ kids, capacity }) {
     <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
       {kids.slice(0, 4).map((k) => (
         <div key={k.id} className="row" style={{ gap: 4, alignItems: 'center' }}>
-          <Avatar name={k.name} color={k.avatar_color} size="sm" />
+          <Avatar name={k.name} color={k.avatar_color} photo={k.photo} size="sm" />
           <span style={{ fontSize: 12, fontWeight: 600 }}>
             {k.name.split(' ')[0]}
           </span>

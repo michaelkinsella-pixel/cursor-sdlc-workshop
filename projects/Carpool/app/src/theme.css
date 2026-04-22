@@ -216,6 +216,13 @@ a { color: inherit; text-decoration: none; }
 .avatar-pink { background: linear-gradient(135deg, #be185d, #f472b6); }
 .avatar-teal { background: linear-gradient(135deg, #0f766e, #5eead4); }
 .avatar-gray { background: linear-gradient(135deg, #6b7280, #d1d5db); }
+.avatar-photo {
+  background-color: var(--gray-100);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: transparent;
+}
 
 .tabbar {
   position: fixed;

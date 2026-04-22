@@ -702,6 +702,28 @@ export function updateNotificationPrefs(parentId, patch) {
   return prefs;
 }
 
+/* ---------- profile photos ---------- */
+
+export function setParentPhoto(parentId, dataUrl) {
+  const data = load();
+  const p = data.parents.find((x) => x.id === parentId);
+  if (!p) return null;
+  if (dataUrl) p.photo = dataUrl;
+  else delete p.photo;
+  persist();
+  return p;
+}
+
+export function setChildPhoto(childId, dataUrl) {
+  const data = load();
+  const c = data.children.find((x) => x.id === childId);
+  if (!c) return null;
+  if (dataUrl) c.photo = dataUrl;
+  else delete c.photo;
+  persist();
+  return c;
+}
+
 /* ---------- sub requests ---------- */
 
 export function getOpenSubRequestsForTeam(teamId) {

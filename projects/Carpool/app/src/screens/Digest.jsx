@@ -98,7 +98,7 @@ export function Digest({ ctx }) {
             const actor = getParent(rse.actor_id);
             return (
               <div key={rse.id} className="list-row" style={{ alignItems: 'flex-start' }}>
-                {actor && <Avatar name={actor.name} color={actor.avatar_color} size="sm" />}
+                {actor && <Avatar name={actor.name} color={actor.avatar_color} photo={actor.photo} size="sm" />}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14 }}>
                     <strong>{actor?.name?.split(' ')[0] || 'Someone'}</strong> {summarize(rse.kind)}

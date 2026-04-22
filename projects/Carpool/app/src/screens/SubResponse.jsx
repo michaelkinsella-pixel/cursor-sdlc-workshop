@@ -92,7 +92,7 @@ export function SubResponse({ subRequestId, ctx }) {
               "{sub.reason}"
             </div>
             <div className="row" style={{ marginTop: 10, alignItems: 'center' }}>
-              <Avatar name={requester.name} color={requester.avatar_color} size="sm" />
+              <Avatar name={requester.name} color={requester.avatar_color} photo={requester.photo} size="sm" />
               <span style={{ fontSize: 13 }} className="muted">— {requester.name}</span>
             </div>
           </div>
@@ -104,7 +104,7 @@ export function SubResponse({ subRequestId, ctx }) {
             <div style={{ marginTop: 10 }}>
               {kids.map((k) => (
                 <div key={k.id} className="list-row">
-                  <Avatar name={k.name} color={k.avatar_color} />
+                  <Avatar name={k.name} color={k.avatar_color} photo={k.photo} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{k.name}</div>
                     <div className="muted" style={{ fontSize: 12 }}>age {k.age}</div>

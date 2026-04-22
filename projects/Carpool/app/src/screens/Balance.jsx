@@ -57,7 +57,7 @@ export function Balance({ teamId, ctx }) {
             return (
               <div key={m.id} className="card">
                 <div className="row" style={{ alignItems: 'center' }}>
-                  <Avatar name={m.name} color={m.avatar_color} />
+                  <Avatar name={m.name} color={m.avatar_color} photo={m.photo} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>
                       {m.name}

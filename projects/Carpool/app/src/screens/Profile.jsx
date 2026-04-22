@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   getCurrentParent,
   getKidsForParent,
@@ -10,10 +10,13 @@ import {
   addAutoClaimRule,
   toggleAutoClaimRule,
   removeAutoClaimRule,
+  setParentPhoto,
+  setChildPhoto,
 } from '../data/store.js';
 import { applyAutoClaimRules } from '../data/lifecycle.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { TopNav } from '../components/TopNav.jsx';
+import { compressImageToDataUrl } from '../lib/imageUtils.js';
 
 export function Profile({ ctx }) {
   const me = getCurrentParent();
@@ -32,7 +35,16 @@ export function Profile({ ctx }) {
       <div className="section">
         <div className="card">
           <div className="row" style={{ alignItems: 'center' }}>
-            <Avatar name={me.name} color={me.avatar_color} size="lg" />
+            <PhotoEditableAvatar
+              name={me.name}
+              color={me.avatar_color}
+              photo={me.photo}
+              size="lg"
+              onPick={(dataUrl) => {
+                setParentPhoto(me.id, dataUrl);
+                ctx.showToast(dataUrl ? 'Photo updated' : 'Photo removed');
+              }}
+            />
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 17 }}>{me.name}</div>
               <div className="muted" style={{ fontSize: 13 }}>{me.phone}</div>
@@ -53,7 +65,16 @@ export function Profile({ ctx }) {
           return (
             <div key={k.id} className="card">
               <div className="row">
-                <Avatar name={k.name} color={k.avatar_color} size="lg" />
+                <PhotoEditableAvatar
+                  name={k.name}
+                  color={k.avatar_color}
+                  photo={k.photo}
+                  size="lg"
+                  onPick={(dataUrl) => {
+                    setChildPhoto(k.id, dataUrl);
+                    ctx.showToast(dataUrl ? `Photo updated for ${k.name}` : `Photo removed for ${k.name}`);
+                  }}
+                />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{k.name}</div>
                   <div className="muted" style={{ fontSize: 13 }}>
@@ -127,7 +148,7 @@ export function Profile({ ctx }) {
                 <div className="caps muted" style={{ marginBottom: 8 }}>Team members</div>
                 {members.map((p) => (
                   <div key={p.id} className="list-row">
-                    <Avatar name={p.name} color={p.avatar_color} size="sm" />
+                    <Avatar name={p.name} color={p.avatar_color} photo={p.photo} size="sm" />
                     <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
                       {p.name}
                       {p.id === me.id && <span className="muted" style={{ fontWeight: 400 }}> (you)</span>}
@@ -640,5 +661,94 @@ function ChipBtn({ label, active, onClick }) {
     >
       {label}
     </button>
+  );
+}
+
+function PhotoEditableAvatar({ name, color, photo, size = 'lg', onPick }) {
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow picking the same file again later
+    if (!file) return;
+    setBusy(true);
+    try {
+      const dataUrl = await compressImageToDataUrl(file, { maxSize: 256 });
+      onPick(dataUrl);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Could not process that image');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        title={photo ? 'Change photo' : 'Add a photo'}
+        style={{
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'block',
+          opacity: busy ? 0.5 : 1,
+        }}
+      >
+        <Avatar name={name} color={color} photo={photo} size={size} />
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            right: -2,
+            bottom: -2,
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'var(--green-700)',
+            color: 'white',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid white',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          }}
+        >
+          {photo ? '✎' : '+'}
+        </span>
+      </button>
+      {photo && (
+        <button
+          type="button"
+          onClick={() => onPick(null)}
+          style={{
+            display: 'block',
+            marginTop: 4,
+            fontSize: 11,
+            color: 'var(--red-text)',
+            fontWeight: 600,
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+          }}
+        >
+          Remove
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        style={{ display: 'none' }}
+        onChange={handleFile}
+      />
+    </div>
   );
 }

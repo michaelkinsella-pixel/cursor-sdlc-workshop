@@ -148,7 +148,7 @@ export function Today({ ctx }) {
               {me.name.split(' ')[0]}
             </div>
           </div>
-          <Avatar name={me.name} color={me.avatar_color} size="lg" />
+          <Avatar name={me.name} color={me.avatar_color} photo={me.photo} size="lg" />
         </div>
       </div>
 
@@ -940,7 +940,7 @@ function KidOutSheet({ open, onClose, rows, meId, onRemove }) {
                     width: '100%',
                   }}
                 >
-                  <Avatar name={g.child.name} color={g.child.avatar_color} size="sm" />
+                  <Avatar name={g.child.name} color={g.child.avatar_color} photo={g.child.photo} size="sm" />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>
                       {g.child.name} → {g.event.title}
@@ -994,7 +994,7 @@ function KidOutSheet({ open, onClose, rows, meId, onRemove }) {
                 border: '1px solid var(--gray-100)',
               }}
             >
-              <Avatar name={pickedGroup.child.name} color={pickedGroup.child.avatar_color} size="sm" />
+              <Avatar name={pickedGroup.child.name} color={pickedGroup.child.avatar_color} photo={pickedGroup.child.photo} size="sm" />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>
                   Pull {pickedGroup.child.name} from {pickedGroup.event.title}
@@ -1135,7 +1135,7 @@ function AddMyKidSheet({ open, onClose, rows, onAdd }) {
                   width: '100%',
                 }}
               >
-                <Avatar name={row.kid.name} color={row.kid.avatar_color} size="sm" />
+                <Avatar name={row.kid.name} color={row.kid.avatar_color} photo={row.kid.photo} size="sm" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
                     {row.kid.name} → {row.event.title}
@@ -1262,7 +1262,7 @@ function DayOfCard({ leg, ctx, meId }) {
       <div style={{ marginTop: 14, display: 'flex', gap: -8 }}>
         {kids.map((k, i) => (
           <div key={k.id} style={{ marginLeft: i === 0 ? 0 : -10 }}>
-            <Avatar name={k.name} color={k.avatar_color} size="sm" />
+            <Avatar name={k.name} color={k.avatar_color} photo={k.photo} size="sm" />
           </div>
         ))}
         <div style={{ marginLeft: 8, fontSize: 13, alignSelf: 'center', opacity: 0.95 }}>
@@ -1443,7 +1443,7 @@ function LegRow({ leg, myKidIds, ctx, meId }) {
               </>
             ) : (
               <>
-                <Avatar name={driver.name} color={driver.avatar_color} />
+                <Avatar name={driver.name} color={driver.avatar_color} photo={driver.photo} />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{driver.name}</div>
                   <div className="muted" style={{ fontSize: 12 }}>

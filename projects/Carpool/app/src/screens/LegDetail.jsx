@@ -129,7 +129,7 @@ export function LegDetail({ legId, ctx }) {
           <div className="caps muted">Driver</div>
           {driver ? (
             <div className="row" style={{ marginTop: 8 }}>
-              <Avatar name={driver.name} color={driver.avatar_color} size="lg" />
+              <Avatar name={driver.name} color={driver.avatar_color} photo={driver.photo} size="lg" />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 17 }}>{driver.name}</div>
                 <div className="muted" style={{ fontSize: 13 }}>
@@ -302,7 +302,7 @@ function PassengerRow({ child, meId, legId, onUnseat }) {
   const primary = coParents[0];
   return (
     <div className="list-row">
-      <Avatar name={child.name} color={child.avatar_color} />
+      <Avatar name={child.name} color={child.avatar_color} photo={child.photo} />
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{child.name}</div>
         <div className="muted" style={{ fontSize: 12 }}>
@@ -536,7 +536,7 @@ function AssignKidSheet({ open, onClose, legId, meId, myKids, ctx }) {
                 }
               }}
             >
-              <Avatar name={k.name} color={k.avatar_color} />
+              <Avatar name={k.name} color={k.avatar_color} photo={k.photo} />
               <div style={{ flex: 1, textAlign: 'left' }}>
                 <div style={{ fontWeight: 700 }}>{k.name}</div>
                 <div className="muted" style={{ fontSize: 12 }}>

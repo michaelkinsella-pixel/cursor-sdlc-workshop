@@ -310,7 +310,7 @@ export function ActiveRide({ legId, ctx }) {
                   </a>
                 )}
                 {s.kid && (
-                  <Avatar name={s.kid.name} color={s.kid.avatar_color} size="sm" />
+                  <Avatar name={s.kid.name} color={s.kid.avatar_color} photo={s.kid.photo} size="sm" />
                 )}
               </div>
             );
