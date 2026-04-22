@@ -12,6 +12,18 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function LegStatusPill({ label, leg }) {
+  const open = !leg.driver_id;
+  const cls = open ? 'pill pill-yellow' : 'pill pill-green';
+  const text = open ? 'OPEN' : 'COVERED';
+  const dot = open ? '●' : '✓';
+  return (
+    <span className={cls} style={{ fontSize: 11, letterSpacing: 0.3 }}>
+      {label}: {dot} {text}
+    </span>
+  );
+}
+
 function dateLabel(iso) {
   const d = new Date(iso);
   const today = new Date();
@@ -58,7 +70,8 @@ export function Schedule({ ctx }) {
             </div>
             {dayEvents.map((e) => {
               const legs = getLegsForEvent(e.id);
-              const openCount = legs.filter((l) => !l.driver_id).length;
+              const toLeg = legs.find((l) => l.direction === 'to_event');
+              const fromLeg = legs.find((l) => l.direction === 'from_event');
               return (
                 <button
                   key={e.id}
@@ -85,13 +98,10 @@ export function Schedule({ ctx }) {
                         <SourceBadge event={e} />
                       </div>
                     </div>
-                    {openCount > 0 ? (
-                      <span className="pill pill-yellow">
-                        ● {openCount} open
-                      </span>
-                    ) : (
-                      <span className="pill pill-green">✓ Covered</span>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                      {toLeg && <LegStatusPill label="To" leg={toLeg} />}
+                      {fromLeg && <LegStatusPill label="From" leg={fromLeg} />}
+                    </div>
                   </div>
                 </button>
               );
