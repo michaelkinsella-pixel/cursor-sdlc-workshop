@@ -149,7 +149,7 @@ export function startFreshOnboarding() {
  * either created or joined via invite code, set them as the current session,
  * and mark onboarding complete. Returns { parent, team }.
  */
-export function completeOnboarding({ phone, name, avatarColor, kids, team }) {
+export function completeOnboarding({ phone, name, avatarColor, kids, team, driverAttestation }) {
   const data = load();
   const parentId = newId('p');
   const parent = {
@@ -160,6 +160,11 @@ export function completeOnboarding({ phone, name, avatarColor, kids, team }) {
     default_seats: 4,
     home_address: '',
     school_address: '',
+    // Stored as null when the parent opts out ("coordinator only") so the
+    // UI can distinguish "hasn't been asked yet" from "explicitly declined."
+    // When set, the object is the same shape we'll store in Supabase
+    // (parents.driver_attestation jsonb) so the port is a copy-paste.
+    driver_attestation: driverAttestation || null,
   };
   data.parents.push(parent);
 
@@ -198,7 +203,10 @@ export function completeOnboarding({ phone, name, avatarColor, kids, team }) {
           team_id: existing.id,
           parent_id: parentId,
           role: 'member',
-          driver_approved: true,
+          // Only mark as approved-to-drive if they completed the attestation.
+          // Coordinator-only parents (driverAttestation === null) join the
+          // team but won't appear in driver suggestions.
+          driver_approved: !!driverAttestation,
         });
       }
       for (const c of createdKids) {
@@ -228,7 +236,7 @@ export function completeOnboarding({ phone, name, avatarColor, kids, team }) {
       team_id: teamId,
       parent_id: parentId,
       role: 'admin',
-      driver_approved: true,
+      driver_approved: !!driverAttestation,
     });
     for (const c of createdKids) {
       if (c._include_in_team === false) continue;
@@ -347,10 +355,25 @@ export function getTeam(teamId) {
 
 export function getTeamsForParent(parentId) {
   const data = load();
-  const teamIds = data.team_members
-    .filter((tm) => tm.parent_id === parentId)
-    .map((tm) => tm.team_id);
+  const teamIds = getMyTeamIds(parentId);
   return data.teams.filter((t) => teamIds.includes(t.id));
+}
+
+/**
+ * The single source of truth for "which teams does this parent belong to."
+ * Mirror of the `team_ids_of_current_parent()` SQL helper in
+ * migrations/002_rls_policies.sql — using the same name on both sides
+ * makes the eventual Supabase port mechanical.
+ *
+ * Honors the soft-delete column `removed_at` so a parent removed from a
+ * team by an admin no longer sees that team's data.
+ */
+export function getMyTeamIds(parentId) {
+  if (!parentId) return [];
+  const data = load();
+  return data.team_members
+    .filter((tm) => tm.parent_id === parentId && !tm.removed_at)
+    .map((tm) => tm.team_id);
 }
 
 export function getKidsOnTeam(teamId) {

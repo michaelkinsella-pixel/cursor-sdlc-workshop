@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { addScheduleSource, completeOnboarding, db, getSource, markOnboarded, _internals } from '../data/store.js';
 import { syncSource } from '../data/lifecycle.js';
 import { Avatar } from '../components/Avatar.jsx';
+import { capture, identify } from '../data/analytics.js';
 
 const { newId } = _internals;
 
 const COLORS = ['green', 'blue', 'purple', 'orange', 'pink', 'teal'];
-const STEPS = ['welcome', 'phone', 'profile', 'kids', 'group', 'calendar', 'done'];
+const STEPS = ['welcome', 'phone', 'profile', 'kids', 'group', 'driver', 'calendar', 'done'];
 const HINT_KEY = 'carpool.hint.gamechanger';
 
 const MONTHS = [
@@ -37,6 +38,17 @@ function toBirthdayIso(k) {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/**
+ * Wraps store.markOnboarded() with the analytics emit so we capture exactly
+ * one onboarding_completed event regardless of which exit path the user
+ * takes (Done step, Take-me-to-import, Schedule sources detour). Includes
+ * the exit_path so we can chart funnel completion modes in PostHog.
+ */
+function finishOnboarding(exitPath) {
+  capture('onboarding_completed', { exit_path: exitPath });
+  markOnboarded();
+}
+
 export function Onboarding({ ctx }) {
   const [step, setStep] = useState('welcome');
 
@@ -57,6 +69,17 @@ export function Onboarding({ ctx }) {
   const [teamSport, setTeamSport] = useState('Baseball');
   const [teamSeason, setTeamSeason] = useState('Spring 2026');
 
+  // Driver attestation: null until the user makes a choice on the driver step.
+  // 'coordinator' = explicitly opted out of driving (no attestation needed).
+  // Object = attested to license / insurance / clean record / agreed terms.
+  const [driverChoice, setDriverChoice] = useState(null); // 'coordinator' | 'driver'
+  const [driverChecks, setDriverChecks] = useState({
+    has_valid_license: false,
+    has_current_insurance: false,
+    clean_record_5y: false,
+    agreed_terms: false,
+  });
+
   const [createdParent, setCreatedParent] = useState(null);
   const [createdTeam, setCreatedTeam] = useState(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
@@ -74,6 +97,16 @@ export function Onboarding({ ctx }) {
   };
 
   const finishCore = () => {
+    // Build driver_attestation only if the user explicitly chose 'driver' AND
+    // checked all four boxes. Otherwise null = "coordinator only, won't drive."
+    // The shape here is what gets persisted to parents.driver_attestation
+    // (jsonb column in Supabase) — keep in sync with migrations/001_initial_schema.sql.
+    const allChecked = Object.values(driverChecks).every(Boolean);
+    const driverAttestation =
+      driverChoice === 'driver' && allChecked
+        ? { ...driverChecks, attested_at: new Date().toISOString(), version: 1 }
+        : null;
+
     const result = completeOnboarding({
       phone,
       name,
@@ -87,9 +120,22 @@ export function Onboarding({ ctx }) {
           : groupMode === 'create'
             ? { mode: 'create', name: teamName, sport: teamSport, season: teamSeason }
             : null,
+      driverAttestation,
     });
     setCreatedParent(result.parent);
     setCreatedTeam(result.team);
+
+    // Tie subsequent events to this parent (no PII — id only).
+    identify(result.parent.id, {
+      role: driverChoice || 'driver',
+      driver_attested: !!driverAttestation,
+      team_mode: groupMode,
+    });
+    capture('signup_completed', {
+      kid_count: kids.filter((k) => k.name.trim()).length,
+      team_mode: groupMode || 'skipped',
+      driver_attested: !!driverAttestation,
+    });
     return result;
   };
 
@@ -165,6 +211,15 @@ export function Onboarding({ ctx }) {
             setTeamSeason={setTeamSeason}
             kids={kids}
             setKids={setKids}
+            onNext={goNext}
+          />
+        )}
+        {step === 'driver' && (
+          <DriverStep
+            choice={driverChoice}
+            setChoice={setDriverChoice}
+            checks={driverChecks}
+            setChecks={setDriverChecks}
             onNext={goNext}
           />
         )}
@@ -797,7 +852,203 @@ function ChoiceCard({ icon, title, body, onClick, recommended }) {
   );
 }
 
-/* ---------- step 6: calendar ---------- */
+/* ---------- step 6: driver attestation ---------- */
+
+function DriverStep({ choice, setChoice, checks, setChecks, onNext }) {
+  const allChecked = Object.values(checks).every(Boolean);
+  const canContinue = choice === 'coordinator' || (choice === 'driver' && allChecked);
+
+  const toggle = (key) => setChecks({ ...checks, [key]: !checks[key] });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '70vh' }}>
+      <div className="h1" style={{ marginBottom: 6 }}>
+        Will you drive carpools?
+      </div>
+      <div className="muted" style={{ fontSize: 14, marginBottom: 20 }}>
+        Some parents prefer to coordinate without driving. Either way is welcome — pick the
+        role that fits how you'll use Carpool.
+      </div>
+
+      <RoleCard
+        active={choice === 'driver'}
+        onClick={() => setChoice('driver')}
+        emoji="🚗"
+        title="I'll drive"
+        body="I'll claim drop-offs and pick-ups for my group."
+      />
+      <RoleCard
+        active={choice === 'coordinator'}
+        onClick={() => setChoice('coordinator')}
+        emoji="📋"
+        title="Coordinator only"
+        body="I'll help organize but won't be a driver."
+      />
+
+      {choice === 'driver' && (
+        <div
+          style={{
+            marginTop: 18,
+            padding: 16,
+            background: 'white',
+            borderRadius: 14,
+            border: '1px solid var(--gray-200)',
+          }}
+        >
+          <div className="caps muted" style={{ marginBottom: 10 }}>
+            Driver attestation
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--gray-700)', marginBottom: 14 }}>
+            Confirm the basics so other parents know it's safe for their kids to ride with you.
+            We don't share these answers — they're stored on your profile only.
+          </div>
+
+          <AttestRow
+            checked={checks.has_valid_license}
+            onToggle={() => toggle('has_valid_license')}
+            label="I have a valid driver's license"
+          />
+          <AttestRow
+            checked={checks.has_current_insurance}
+            onToggle={() => toggle('has_current_insurance')}
+            label="I carry current auto insurance that covers passengers"
+          />
+          <AttestRow
+            checked={checks.clean_record_5y}
+            onToggle={() => toggle('clean_record_5y')}
+            label="No DUI, reckless driving, or license suspension in the past 5 years"
+          />
+          <AttestRow
+            checked={checks.agreed_terms}
+            onToggle={() => toggle('agreed_terms')}
+            label={
+              <>
+                I agree to the{' '}
+                <span style={{ color: 'var(--green-700)', fontWeight: 700 }}>driver terms</span>{' '}
+                and accept that I'm responsible for safe operation while my kids and others ride
+                with me.
+              </>
+            }
+          />
+
+          {!allChecked && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 10,
+                background: 'var(--yellow-100)',
+                borderRadius: 10,
+                fontSize: 12,
+                color: 'var(--yellow-text)',
+              }}
+            >
+              Check all four to continue as a driver, or pick "Coordinator only" above.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ flex: 1 }} />
+
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={!canContinue}
+        onClick={onNext}
+        style={{ marginTop: 24, opacity: canContinue ? 1 : 0.5 }}
+      >
+        Continue
+      </button>
+    </div>
+  );
+}
+
+function RoleCard({ active, onClick, emoji, title, body }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="card"
+      style={{
+        background: 'white',
+        textAlign: 'left',
+        padding: 16,
+        marginBottom: 10,
+        border: active ? '2px solid var(--green-700)' : '1px solid var(--gray-200)',
+        cursor: 'pointer',
+      }}
+    >
+      <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 26, lineHeight: 1 }}>{emoji}</span>
+        <div style={{ flex: 1 }}>
+          <div className="h3" style={{ marginBottom: 2 }}>{title}</div>
+          <div className="muted" style={{ fontSize: 13 }}>{body}</div>
+        </div>
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            border: active ? 'none' : '2px solid var(--gray-300)',
+            background: active ? 'var(--green-700)' : 'transparent',
+            color: 'white',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 14,
+            fontWeight: 800,
+            flexShrink: 0,
+          }}
+        >
+          {active ? '✓' : ''}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function AttestRow({ checked, onToggle, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 10,
+        padding: '10px 0',
+        background: 'transparent',
+        textAlign: 'left',
+        cursor: 'pointer',
+        border: 'none',
+      }}
+    >
+      <span
+        style={{
+          width: 22,
+          height: 22,
+          minWidth: 22,
+          borderRadius: 6,
+          border: checked ? 'none' : '2px solid var(--gray-300)',
+          background: checked ? 'var(--green-700)' : 'transparent',
+          color: 'white',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 13,
+          fontWeight: 800,
+          marginTop: 1,
+        }}
+      >
+        {checked ? '✓' : ''}
+      </span>
+      <span style={{ fontSize: 13, color: 'var(--gray-900)', lineHeight: 1.4 }}>{label}</span>
+    </button>
+  );
+}
+
+/* ---------- step 7: calendar ---------- */
 
 function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goBackToGroup }) {
   const [picked, setPicked] = useState(null); // null | 'gc' | 'other' | 'sample' | 'skip'
@@ -933,7 +1184,7 @@ function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goB
 
     const takeMeThere = () => {
       const { team } = ensureCore();
-      markOnboarded();
+      finishOnboarding('calendar_take_me_there');
       if (team) {
         ctx.navigate('add_schedule_source', { teamId: team.id, prefillUrl: gcUrl.trim() || undefined });
       }
@@ -1032,7 +1283,7 @@ function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goB
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => {
-                  markOnboarded();
+                  finishOnboarding('calendar_manage_feed');
                   ctx.navigate('schedule_sources', { teamId: importResult.teamId });
                 }}
               >
@@ -1107,7 +1358,7 @@ function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goB
         style={{ width: '100%', marginTop: 12, marginBottom: 8 }}
         onClick={() => {
           const { team } = ensureCore();
-          markOnboarded();
+          finishOnboarding('calendar_add_source');
           if (team) ctx.navigate('add_schedule_source', { teamId: team.id });
         }}
       >
@@ -1543,7 +1794,7 @@ function DoneStep({ parent, team, ctx }) {
         className="btn btn-primary"
         style={{ width: '100%' }}
         onClick={() => {
-          markOnboarded();
+          finishOnboarding('done_step');
           ctx.navigate('today');
         }}
       >

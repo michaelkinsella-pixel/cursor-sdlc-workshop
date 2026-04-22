@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { subscribe, getCurrentParent, listParents, setCurrentParentId, unreadCount, resetDb, isOnboarded, startFreshOnboarding, shouldShowGcHint, getOpenLegsForParent } from './data/store.js';
+import { resetAnalytics } from './data/analytics.js';
 import { Onboarding } from './screens/Onboarding.jsx';
 import { Today } from './screens/Today.jsx';
 import { Schedule } from './screens/Schedule.jsx';
@@ -195,6 +196,7 @@ export default function App() {
             onClick={() => {
               if (confirm('Wipe everything and run the onboarding wizard from scratch?')) {
                 startFreshOnboarding();
+                resetAnalytics();
                 setShowSwitcher(false);
                 navigate('today');
               }

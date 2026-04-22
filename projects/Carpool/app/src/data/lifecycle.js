@@ -23,6 +23,7 @@ import {
   _internals,
 } from './store.js';
 import { parseIcs } from './ics.js';
+import { capture } from './analytics.js';
 
 const {
   persist,
@@ -135,6 +136,20 @@ export function claimLeg(legId, parentId, seatCapacity) {
     persist();
     return true;
   };
+
+  // Funnel event — fired after persist() so a downstream failure doesn't
+  // produce a phantom claim in PostHog. No PII; just IDs + leg shape so we
+  // can chart claim volume, hours-out distribution, and seat utilization.
+  capture('leg_claimed', {
+    leg_id: legId,
+    direction: leg.direction,
+    hours_out: Math.max(
+      0,
+      Math.round((new Date(leg.departure_time).getTime() - Date.now()) / 3_600_000),
+    ),
+    seats_taken: seatedChildren.length,
+    seat_capacity: next.seat_capacity,
+  });
 
   return { ok: true, leg: next, undo };
 }
@@ -347,6 +362,23 @@ export function releaseLeg(legId, parentId, { emergency = false, reason = '' } =
     }
   }
   persist();
+
+  // Funnel event — pair this with sub_request_response_received later to
+  // measure response time and gap rate. `reason` is a short pre-defined
+  // chip ('Sick' | 'Work conflict' | …) or free text — log the chip
+  // category but truncate free text so we don't leak personal detail.
+  capture('sub_requested', {
+    sub_request_id: subId,
+    leg_id: legId,
+    direction: leg.direction,
+    hours_until_departure: Math.max(
+      0,
+      Math.round((new Date(leg.departure_time).getTime() - Date.now()) / 3_600_000),
+    ),
+    reason_kind: reason && reason.length <= 32 ? reason : 'custom',
+    team_size: getMembersForTeam(teamOf(leg)).length,
+  });
+
   return { ok: true, mode: 'released_with_sub_request', sub_request_id: subId };
 }
 
