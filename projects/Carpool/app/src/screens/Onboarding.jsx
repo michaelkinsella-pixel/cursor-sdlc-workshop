@@ -3,6 +3,7 @@ import { addScheduleSource, completeOnboarding, db, getSource, markOnboarded, _i
 import { syncSource } from '../data/lifecycle.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { capture, identify } from '../data/analytics.js';
+import { completeOnboardingInSupabase } from '../data/onboardingSupabase.js';
 
 const { newId } = _internals;
 
@@ -107,7 +108,7 @@ export function Onboarding({ ctx }) {
         ? { ...driverChecks, attested_at: new Date().toISOString(), version: 1 }
         : null;
 
-    const result = completeOnboarding({
+    const onboardingPayload = {
       phone,
       name,
       avatarColor,
@@ -121,9 +122,26 @@ export function Onboarding({ ctx }) {
             ? { mode: 'create', name: teamName, sport: teamSport, season: teamSeason }
             : null,
       driverAttestation,
-    });
+    };
+
+    const result = completeOnboarding(onboardingPayload);
     setCreatedParent(result.parent);
     setCreatedTeam(result.team);
+
+    completeOnboardingInSupabase(onboardingPayload).then((syncResult) => {
+      if (syncResult.ok) {
+        capture('supabase_onboarding_synced', {
+          team_mode: groupMode || 'skipped',
+          driver_attested: !!driverAttestation,
+        });
+        ctx.showToast('Saved to Kinpala backend');
+      } else if (!syncResult.skipped) {
+        capture('supabase_onboarding_sync_failed', { reason: syncResult.reason });
+        ctx.showToast(`Local signup worked, but Supabase sync failed: ${syncResult.reason}`, {
+          duration: 7000,
+        });
+      }
+    });
 
     // Tie subsequent events to this parent (no PII — id only).
     identify(result.parent.id, {
@@ -1050,7 +1068,7 @@ function AttestRow({ checked, onToggle, label }) {
 
 /* ---------- step 7: calendar ---------- */
 
-function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goBackToGroup }) {
+function CalendarStep({ createdParent, createdTeam, finishCore, busy, setBusy, ctx, goDone, goBackToGroup }) {
   const [picked, setPicked] = useState(null); // null | 'gc' | 'other' | 'sample' | 'skip'
   const [gcUrl, setGcUrl] = useState('');
   const [gcErr, setGcErr] = useState('');
@@ -1061,7 +1079,11 @@ function CalendarStep({ createdTeam, finishCore, busy, setBusy, ctx, goDone, goB
 
   // Realize parent + team on demand. We commit in this step so any "Take me there" path
   // lands the user on a screen with a real session and a real team to attach things to.
-  const ensureCore = () => (createdTeam ? { team: createdTeam } : finishCore());
+  const ensureCore = () => (
+    createdParent
+      ? { parent: createdParent, team: createdTeam }
+      : finishCore()
+  );
 
   if (!picked) {
     const noTeam = !createdTeam && !db().teams.length;
