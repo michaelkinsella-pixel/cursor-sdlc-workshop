@@ -24,6 +24,7 @@ import {
 import {
   loadBackendOperationalState,
   claimLegBackend,
+  subscribeToCarpoolLegs,
 } from '../data/operationalBackend.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Sheet } from '../components/Sheet.jsx';
@@ -399,6 +400,18 @@ export function Today({ ctx }) {
     const res = await loadBackendOperationalState();
     if (res.ok) setBackendState({ status: 'ready', backend: res, reason: null });
   }, []);
+
+  // Realtime: when any teammate's claim/release modifies a carpool_legs row
+  // we can see (RLS-gated), refresh local backend state. Subscription stays
+  // up only while we're in backend mode; in fallback / unconfigured mode the
+  // helper short-circuits to a noop so this is cheap.
+  useEffect(() => {
+    if (backendState.status !== 'ready') return undefined;
+    const unsubscribe = subscribeToCarpoolLegs(() => {
+      refreshBackend();
+    });
+    return unsubscribe;
+  }, [backendState.status, refreshBackend]);
 
   const lookups = useMemo(
     () => (backendState.status === 'ready' ? buildBackendLookups(backendState.backend) : null),

@@ -193,3 +193,40 @@ export async function releaseLegBackend(legId) {
     leg: data?.leg,
   };
 }
+
+/**
+ * Subscribe to realtime changes on carpool_legs and call onChange whenever
+ * a row is inserted, updated, or deleted. Returns an unsubscribe function;
+ * callers should invoke it on component unmount or session change.
+ *
+ * Realtime respects RLS, so subscribers only see events for legs in events
+ * of teams the auth parent belongs to. We don't filter by event_id here —
+ * the database does the right thing.
+ *
+ * If Supabase isn't configured or the user isn't signed in, this no-ops
+ * and returns a noop unsubscribe so callers don't have to special-case it.
+ */
+export function subscribeToCarpoolLegs(onChange) {
+  if (!isSupabaseConfigured()) return () => {};
+
+  const supabase = getSupabase();
+  const channel = supabase
+    .channel('carpool_legs_changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'carpool_legs' },
+      (payload) => {
+        try {
+          onChange(payload);
+        } catch (err) {
+          // Don't let a buggy listener tear down the channel.
+          console.error('subscribeToCarpoolLegs onChange threw:', err);
+        }
+      },
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

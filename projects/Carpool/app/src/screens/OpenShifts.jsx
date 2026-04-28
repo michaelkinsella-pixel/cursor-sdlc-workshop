@@ -14,6 +14,7 @@ import { claimLeg, seatKid, applyAutoClaimRules } from '../data/lifecycle.js';
 import {
   loadBackendOperationalState,
   claimLegBackend,
+  subscribeToCarpoolLegs,
 } from '../data/operationalBackend.js';
 import { TopNav } from '../components/TopNav.jsx';
 import { Avatar } from '../components/Avatar.jsx';
@@ -73,6 +74,16 @@ export function OpenShifts({ ctx }) {
     const res = await loadBackendOperationalState();
     if (res.ok) setBackendState({ status: 'ready', backend: res, reason: null });
   }, []);
+
+  // Realtime: any teammate's claim/release on a visible carpool_legs row
+  // triggers a refetch so this screen never shows stale "open" status.
+  useEffect(() => {
+    if (backendState.status !== 'ready') return undefined;
+    const unsubscribe = subscribeToCarpoolLegs(() => {
+      refreshBackend();
+    });
+    return unsubscribe;
+  }, [backendState.status, refreshBackend]);
 
   const lookups = useMemo(
     () => (backendState.status === 'ready' ? buildBackendLookups(backendState.backend) : null),
