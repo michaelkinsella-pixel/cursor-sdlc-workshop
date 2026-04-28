@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { subscribe, getCurrentParent, listParents, setCurrentParentId, unreadCount, resetDb, isOnboarded, startFreshOnboarding, shouldShowGcHint, getOpenLegsForParent } from './data/store.js';
 import { resetAnalytics } from './data/analytics.js';
+import { loadBackendProfile } from './data/backendBootstrap.js';
 import { Onboarding } from './screens/Onboarding.jsx';
 import { Today } from './screens/Today.jsx';
 import { Schedule } from './screens/Schedule.jsx';
@@ -25,12 +26,37 @@ import { Avatar } from './components/Avatar.jsx';
 import { Toast } from './components/Toast.jsx';
 
 export default function App() {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const [route, setRoute] = useState({ name: 'today' });
   const [toast, setToast] = useState({ message: '', action: null, duration: 2200 });
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [backendProfile, setBackendProfile] = useState({
+    status: 'loading',
+    data: null,
+    error: null,
+  });
 
   useEffect(() => subscribe(() => setTick((t) => t + 1)), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadBackendProfile()
+      .then((result) => {
+        if (!cancelled) setBackendProfile(result);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBackendProfile({
+            status: 'error',
+            data: null,
+            error: error.message || 'Could not load backend profile',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tick]);
 
   const onboarded = isOnboarded();
   const currentParent = onboarded ? getCurrentParent() : null;
@@ -77,7 +103,7 @@ export default function App() {
       screen = <Schedule ctx={ctx} />;
       break;
     case 'profile':
-      screen = <Profile ctx={ctx} />;
+      screen = <Profile ctx={ctx} backendProfile={backendProfile} />;
       break;
     case 'inbox':
       screen = <NotificationsInbox ctx={ctx} />;

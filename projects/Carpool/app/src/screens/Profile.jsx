@@ -20,7 +20,7 @@ import { Avatar } from '../components/Avatar.jsx';
 import { TopNav } from '../components/TopNav.jsx';
 import { compressImageToDataUrl } from '../lib/imageUtils.js';
 
-export function Profile({ ctx }) {
+export function Profile({ ctx, backendProfile }) {
   const me = getCurrentParent();
   const kids = getKidsForParent(me.id);
   const teams = getTeamsForParent(me.id);
@@ -35,6 +35,8 @@ export function Profile({ ctx }) {
     <>
       <TopNav title="Profile" />
       <div className="section">
+        <BackendProfileCard backendProfile={backendProfile} ctx={ctx} />
+
         <div className="card">
           <div className="row" style={{ alignItems: 'center' }}>
             <PhotoEditableAvatar
@@ -204,6 +206,178 @@ export function Profile({ ctx }) {
         >
           + Create another group
         </button>
+      </div>
+    </>
+  );
+}
+
+function BackendProfileCard({ backendProfile, ctx }) {
+  if (!backendProfile || backendProfile.status === 'unconfigured') return null;
+
+  if (backendProfile.status === 'loading') {
+    return (
+      <div className="card" style={{ background: 'var(--gray-50)' }}>
+        <div className="caps muted" style={{ marginBottom: 6 }}>Kinpala backend</div>
+        <div className="muted" style={{ fontSize: 13 }}>Checking Supabase session…</div>
+      </div>
+    );
+  }
+
+  if (backendProfile.status === 'signed_out' || backendProfile.status === 'no_parent') {
+    return (
+      <div className="card" style={{ background: 'var(--yellow-100)', color: 'var(--yellow-text)' }}>
+        <div className="caps" style={{ marginBottom: 6, opacity: 0.8 }}>Kinpala backend</div>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>
+          This browser is not connected to a real Kinpala profile yet.
+        </div>
+        <div style={{ fontSize: 13, marginTop: 4 }}>
+          Run Start fresh onboarding to create a Supabase-backed parent/team.
+        </div>
+      </div>
+    );
+  }
+
+  if (backendProfile.status === 'error') {
+    return (
+      <div className="card" style={{ background: 'var(--red-100)', color: 'var(--red-text)' }}>
+        <div className="caps" style={{ marginBottom: 6, opacity: 0.8 }}>Kinpala backend</div>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>Could not load Supabase profile</div>
+        <div style={{ fontSize: 12, marginTop: 4 }}>{backendProfile.error}</div>
+      </div>
+    );
+  }
+
+  const { parent, children, teams, childTeams, membersByTeamId } = backendProfile.data;
+
+  return (
+    <>
+      <div className="caps muted" style={{ margin: '0 4px 8px' }}>
+        Kinpala backend
+      </div>
+      <div className="card" style={{ border: '1.5px solid var(--green-700)' }}>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <Avatar name={parent.name} color={parent.avatar_color} photo={parent.photo_url} size="lg" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>{parent.name}</div>
+            <div className="muted" style={{ fontSize: 13 }}>{parent.phone || 'No phone saved'}</div>
+            <div style={{ marginTop: 6 }}>
+              <span className="pill pill-green">Loaded from Supabase</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--gray-100)', paddingTop: 12 }}>
+          <div className="caps muted" style={{ marginBottom: 8 }}>
+            Kids in backend ({children.length})
+          </div>
+          {children.length === 0 ? (
+            <div className="muted" style={{ fontSize: 13 }}>No kids saved yet.</div>
+          ) : (
+            children.map((kid) => {
+              const kidTeamIds = childTeams
+                .filter((row) => row.child_id === kid.id)
+                .map((row) => row.team_id);
+              const kidTeams = teams.filter((team) => kidTeamIds.includes(team.id));
+              return (
+                <div key={kid.id} className="list-row">
+                  <Avatar name={kid.name} color={kid.avatar_color} photo={kid.photo_url} size="sm" />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{kid.name}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {kidTeams.length
+                        ? kidTeams.map((team) => team.name).join(', ')
+                        : 'Not assigned to a team'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--gray-100)', paddingTop: 12 }}>
+          <div className="caps muted" style={{ marginBottom: 8 }}>
+            Teams in backend ({teams.length})
+          </div>
+          {teams.length === 0 ? (
+            <div className="muted" style={{ fontSize: 13 }}>No teams saved yet.</div>
+          ) : (
+            teams.map((team) => {
+              const members = membersByTeamId[team.id] || [];
+              return (
+                <div key={team.id} style={{ marginBottom: 14 }}>
+                  <div className="row-between" style={{ alignItems: 'flex-start', gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15 }}>{team.name}</div>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        {team.sport || 'Activity'} · {team.season || 'Season TBD'}
+                      </div>
+                    </div>
+                    <span className="pill pill-gray">
+                      {members.length} {members.length === 1 ? 'family' : 'families'}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div className="caps muted" style={{ marginBottom: 6 }}>Invite code</div>
+                    <div className="row-between">
+                      <code
+                        style={{
+                          background: 'var(--gray-100)',
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          fontSize: 14,
+                          fontWeight: 800,
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {team.invite_code}
+                      </code>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ width: 'auto', padding: '8px 12px', fontSize: 13 }}
+                        onClick={() => {
+                          navigator.clipboard?.writeText(team.invite_code);
+                          ctx.showToast('Backend invite code copied');
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  {members.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="caps muted" style={{ marginBottom: 6 }}>Members</div>
+                      {members.map((member) => (
+                        <div key={`${team.id}-${member.parent_id}`} className="list-row">
+                          <Avatar
+                            name={member.parent?.name || 'Parent'}
+                            color={member.parent?.avatar_color}
+                            photo={member.parent?.photo_url}
+                            size="sm"
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>
+                              {member.parent?.name || 'Parent'}
+                              {member.parent_id === parent.id && (
+                                <span className="muted" style={{ fontWeight: 400 }}> (you)</span>
+                              )}
+                            </div>
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              {member.role} · {member.driver_approved ? 'approved driver' : 'coordinator only'}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </>
   );
