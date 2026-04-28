@@ -53,6 +53,25 @@ export async function verifyMagicLinkSession(expectedEmail) {
   return { ok: true, session: sessionResult.session };
 }
 
+/**
+ * List the kids already on a team identified by invite code, so a parent
+ * joining via that code can claim co-parent links to existing children
+ * instead of creating duplicate child rows. Backed by migration 010.
+ *
+ * Returns an array of { id, name, age, avatar_color, photo_url, parent_names[] }
+ * or [] when nothing matches / Supabase isn't configured.
+ */
+export async function listTeamChildrenForInvite(inviteCode) {
+  if (!isSupabaseConfigured()) return [];
+  const code = (inviteCode || '').trim().toUpperCase();
+  if (code.length < 3) return [];
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('list_team_children_for_invite', { p_code: code });
+  if (error) return [];
+  return Array.isArray(data) ? data : [];
+}
+
 export async function sendMagicLink(email) {
   if (!isSupabaseConfigured()) {
     return { ok: false, skipped: true, reason: 'supabase_not_configured' };

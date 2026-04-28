@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar.jsx';
 import { capture, identify } from '../data/analytics.js';
 import {
   completeOnboardingInSupabase,
+  listTeamChildrenForInvite,
   sendMagicLink,
   verifyMagicLinkSession,
 } from '../data/onboardingSupabase.js';
@@ -18,7 +19,12 @@ import {
 const { newId } = _internals;
 
 const COLORS = ['green', 'blue', 'purple', 'orange', 'pink', 'teal'];
-const STEPS = ['welcome', 'phone', 'profile', 'kids', 'group', 'driver', 'calendar', 'done'];
+// `team_kids` only renders when joining a team that already has children
+// the parent might be co-parent of (skipped in the create-team flow and
+// when the joined team has no kids yet). It's still part of the linear
+// step array so progress bar math works; the body of the wizard checks
+// the conditions and auto-advances when there's nothing to claim.
+const STEPS = ['welcome', 'phone', 'profile', 'kids', 'group', 'team_kids', 'driver', 'calendar', 'done'];
 const HINT_KEY = 'carpool.hint.gamechanger';
 
 const MONTHS = [
@@ -82,6 +88,13 @@ export function Onboarding({ ctx }) {
   const [teamSport, setTeamSport] = useState('Baseball');
   const [teamSeason, setTeamSeason] = useState('Spring 2026');
 
+  // Co-parent flow: when joining a team that already has kids, the wizard
+  // shows them so the parent can claim links to existing children rather
+  // than creating duplicates. Populated lazily on the team_kids step.
+  const [teamKidsExisting, setTeamKidsExisting] = useState([]);
+  const [teamKidsLoaded, setTeamKidsLoaded] = useState(false);
+  const [existingChildIds, setExistingChildIds] = useState([]);
+
   // Driver attestation: null until the user makes a choice on the driver step.
   // 'coordinator' = explicitly opted out of driving (no attestation needed).
   // Object = attested to license / insurance / clean record / agreed terms.
@@ -127,6 +140,10 @@ export function Onboarding({ ctx }) {
       kids: kids
         .filter((k) => k.name.trim())
         .map((k) => ({ ...k, birthday: toBirthdayIso(k) })),
+      // existing_child_ids is the co-parent claim — links the new parent to
+      // children rows already on the team (created during another parent's
+      // onboarding) instead of creating duplicate children.
+      existing_child_ids: groupMode === 'join' ? existingChildIds : [],
       team:
         groupMode === 'join'
           ? { mode: 'join', inviteCode }
@@ -245,6 +262,19 @@ export function Onboarding({ ctx }) {
             setTeamSeason={setTeamSeason}
             kids={kids}
             setKids={setKids}
+            onNext={goNext}
+          />
+        )}
+        {step === 'team_kids' && (
+          <TeamKidsStep
+            joining={groupMode === 'join'}
+            inviteCode={inviteCode}
+            existingChildIds={existingChildIds}
+            setExistingChildIds={setExistingChildIds}
+            teamKidsExisting={teamKidsExisting}
+            setTeamKidsExisting={setTeamKidsExisting}
+            teamKidsLoaded={teamKidsLoaded}
+            setTeamKidsLoaded={setTeamKidsLoaded}
             onNext={goNext}
           />
         )}
@@ -983,7 +1013,154 @@ function ChoiceCard({ icon, title, body, onClick, recommended }) {
   );
 }
 
-/* ---------- step 6: driver attestation ---------- */
+/* ---------- step 6: claim existing co-parented kids on a joined team ---------- */
+
+function TeamKidsStep({
+  joining,
+  inviteCode,
+  existingChildIds,
+  setExistingChildIds,
+  teamKidsExisting,
+  setTeamKidsExisting,
+  teamKidsLoaded,
+  setTeamKidsLoaded,
+  onNext,
+}) {
+  // Auto-skip when this step doesn't apply: not a join flow, no invite code,
+  // or the team has zero kids. We still register the step in STEPS so the
+  // progress bar math is consistent across both paths.
+  useEffect(() => {
+    if (!joining || (inviteCode || '').trim().length < 3) {
+      onNext();
+      return;
+    }
+    if (teamKidsLoaded) {
+      if (teamKidsExisting.length === 0) onNext();
+      return;
+    }
+    let cancelled = false;
+    listTeamChildrenForInvite(inviteCode).then((kids) => {
+      if (cancelled) return;
+      setTeamKidsExisting(kids);
+      setTeamKidsLoaded(true);
+      if (kids.length === 0) onNext();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    joining,
+    inviteCode,
+    teamKidsLoaded,
+    teamKidsExisting.length,
+    onNext,
+    setTeamKidsExisting,
+    setTeamKidsLoaded,
+  ]);
+
+  if (!joining || !teamKidsLoaded) {
+    return (
+      <div style={{ paddingTop: 24, textAlign: 'center' }}>
+        <div className="muted" style={{ fontSize: 13 }}>Loading team kids…</div>
+      </div>
+    );
+  }
+  if (teamKidsExisting.length === 0) return null;
+
+  const toggle = (childId) => {
+    setExistingChildIds((prev) =>
+      prev.includes(childId) ? prev.filter((id) => id !== childId) : [...prev, childId],
+    );
+  };
+
+  const claimedCount = existingChildIds.length;
+
+  return (
+    <div style={{ paddingTop: 16 }}>
+      <div className="h2" style={{ marginBottom: 6 }}>
+        Are any of these your kids?
+      </div>
+      <div className="muted" style={{ fontSize: 14, marginBottom: 18 }}>
+        These kids are already on the team. Check the ones you co-parent so we
+        link you to them instead of creating duplicates.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        {teamKidsExisting.map((kid) => {
+          const checked = existingChildIds.includes(kid.id);
+          const others = (kid.parent_names || []).filter(Boolean);
+          return (
+            <button
+              key={kid.id}
+              type="button"
+              onClick={() => toggle(kid.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 14,
+                borderRadius: 12,
+                border: checked ? '2px solid var(--green-700)' : '1px solid var(--gray-200)',
+                background: checked ? 'var(--green-100)' : 'white',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <Avatar name={kid.name} color={kid.avatar_color} photo={kid.photo_url} size="md" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--gray-900)' }}>
+                  {kid.name}
+                  {kid.age ? <span className="muted" style={{ fontWeight: 400 }}> · age {kid.age}</span> : null}
+                </div>
+                {others.length > 0 && (
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    Co-parent{others.length > 1 ? 's' : ''}: {others.join(', ')}
+                  </div>
+                )}
+              </div>
+              <span
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 6,
+                  border: checked ? 'none' : '2px solid var(--gray-300)',
+                  background: checked ? 'var(--green-700)' : 'transparent',
+                  color: 'white',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  flexShrink: 0,
+                }}
+              >
+                {checked ? '✓' : ''}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="muted" style={{ fontSize: 11, marginBottom: 16 }}>
+        Tip: if you also added these kids as new in the previous step, tap Back
+        and remove them — otherwise you'll end up with duplicates.
+      </div>
+
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={onNext}
+        style={{ width: '100%' }}
+      >
+        {claimedCount === 0
+          ? 'Continue without claiming'
+          : `Claim ${claimedCount} kid${claimedCount === 1 ? '' : 's'} & continue`}
+      </button>
+    </div>
+  );
+}
+
+/* ---------- step 7: driver attestation ---------- */
 
 function DriverStep({ choice, setChoice, checks, setChecks, onNext }) {
   const allChecked = Object.values(checks).every(Boolean);
