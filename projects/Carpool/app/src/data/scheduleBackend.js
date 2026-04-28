@@ -111,6 +111,26 @@ export async function addBackendScheduleSource({ teamId, teamName, name, kind, u
  * in the exact shape the RPC expects, so we just normalize defensively
  * (drop unknown keys, coerce cancelled to bool) without rewriting timestamps.
  */
+/**
+ * Look up a team in Supabase by its invite code (case-insensitive). The
+ * onboarding wizard's "Join a group" step needs this so a fresh browser
+ * (with no local team list) can still validate an invite code that points
+ * at a real backend team. Backed by find_team_by_invite_code (migration
+ * 009) because direct SELECT on `teams` is RLS-blocked for non-members.
+ * Returns the row as { id, name, sport, season, invite_code } or null
+ * when nothing matches / Supabase isn't configured.
+ */
+export async function findBackendTeamByInviteCode(inviteCode) {
+  if (!isSupabaseConfigured()) return null;
+  const code = (inviteCode || '').trim().toUpperCase();
+  if (code.length < 3) return null;
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('find_team_by_invite_code', { p_code: code });
+  if (error) return null;
+  return data || null;
+}
+
 export async function importBackendEvents(sourceId, parsedEvents) {
   const session = await getSessionResult();
   if (!session.ok) return session;

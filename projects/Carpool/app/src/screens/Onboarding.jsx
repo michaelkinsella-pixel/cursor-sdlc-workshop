@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { addScheduleSource, completeOnboarding, db, getSource, markOnboarded, _internals } from '../data/store.js';
 import { syncSource, fetchIcs } from '../data/lifecycle.js';
 import { parseIcs } from '../data/ics.js';
@@ -11,6 +11,7 @@ import {
 } from '../data/onboardingSupabase.js';
 import {
   addBackendScheduleSource,
+  findBackendTeamByInviteCode,
   importBackendEvents,
 } from '../data/scheduleBackend.js';
 
@@ -696,12 +697,45 @@ function GroupStep(props) {
     );
   };
 
-  const matchedTeam = useMemo(() => {
+  // Local-store lookup: instant, but only finds teams the wizard previously
+  // created on this same browser. In Supabase mode (production / any device
+  // where Parent A onboarded earlier), we fall back to a backend RPC so the
+  // invite code resolves against real Supabase teams the user can't yet
+  // SELECT directly (RLS gates non-members).
+  const localMatchedTeam = useMemo(() => {
     if (mode !== 'join') return null;
     const code = inviteCode.trim().toUpperCase();
     if (code.length < 3) return null;
     return db().teams.find((t) => (t.invite_code || '').toUpperCase() === code) || null;
   }, [mode, inviteCode]);
+
+  const [backendMatchedTeam, setBackendMatchedTeam] = useState(null);
+  const [backendLookupBusy, setBackendLookupBusy] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'join' || localMatchedTeam) {
+      setBackendMatchedTeam(null);
+      return undefined;
+    }
+    const code = inviteCode.trim().toUpperCase();
+    if (code.length < 3) {
+      setBackendMatchedTeam(null);
+      return undefined;
+    }
+    let cancelled = false;
+    setBackendLookupBusy(true);
+    findBackendTeamByInviteCode(code).then((team) => {
+      if (cancelled) return;
+      setBackendMatchedTeam(team || null);
+      setBackendLookupBusy(false);
+    });
+    return () => {
+      cancelled = true;
+      setBackendLookupBusy(false);
+    };
+  }, [mode, inviteCode, localMatchedTeam]);
+
+  const matchedTeam = localMatchedTeam || backendMatchedTeam;
 
   // Render the chooser whenever mode isn't explicitly 'join' or 'create'.
   // This prevents a stale 'skip' (or any other value) from falling through to
@@ -770,7 +804,12 @@ function GroupStep(props) {
             ✓ Found <strong>{matchedTeam.name}</strong> · {matchedTeam.sport} · {matchedTeam.season}
           </div>
         )}
-        {!matchedTeam && inviteCode.trim().length >= 3 && (
+        {!matchedTeam && inviteCode.trim().length >= 3 && backendLookupBusy && (
+          <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
+            Looking up code…
+          </div>
+        )}
+        {!matchedTeam && inviteCode.trim().length >= 3 && !backendLookupBusy && (
           <div className="muted" style={{ fontSize: 13, marginBottom: 14 }}>
             No group yet — double-check the code with your admin.
           </div>
