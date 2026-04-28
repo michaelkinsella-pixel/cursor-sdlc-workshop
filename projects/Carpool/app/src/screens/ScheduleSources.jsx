@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import {
+  getCurrentParent,
+  getKidsForParent,
   getSourcesForTeam,
   getSource,
   addScheduleSource,
   removeScheduleSource,
   getTeam,
+  getTeamsForChild,
+  setChildTeams,
 } from '../data/store.js';
 import { syncSource, fetchIcs } from '../data/lifecycle.js';
 import { parseIcs } from '../data/ics.js';
@@ -189,12 +193,20 @@ const PRESET_FEEDS = [
 
 export function AddScheduleSource({ teamId, prefillUrl, ctx }) {
   const team = getTeam(teamId);
+  const me = getCurrentParent();
+  const kids = getKidsForParent(me.id);
+  const allowedTeamIds = team ? [team.id] : [];
 
   const [mode, setMode] = useState(prefillUrl ? 'url' : 'url'); // 'sample' | 'url'
   const [name, setName] = useState('');
   const [url, setUrl] = useState(prefillUrl || '');
   const [dropEarly, setDropEarly] = useState(15);
   const [pickLate, setPickLate] = useState(0);
+  const [kidIdsOnTeam, setKidIdsOnTeam] = useState(() =>
+    kids
+      .filter((kid) => getTeamsForChild(kid.id).some((t) => t.id === teamId))
+      .map((kid) => kid.id),
+  );
 
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -246,6 +258,7 @@ export function AddScheduleSource({ teamId, prefillUrl, ctx }) {
   };
 
   const confirm = async () => {
+    saveKidAssignments({ silent: true });
     const src = addScheduleSource({
       team_id: teamId,
       name: name.trim() || 'Imported schedule',
@@ -269,6 +282,23 @@ export function AddScheduleSource({ teamId, prefillUrl, ctx }) {
       ctx.showToast(`Saved feed but sync failed: ${e.message}`);
     }
     ctx.navigate('schedule_sources', { teamId });
+  };
+
+  const toggleKid = (kidId) => {
+    setKidIdsOnTeam((prev) =>
+      prev.includes(kidId) ? prev.filter((id) => id !== kidId) : [...prev, kidId],
+    );
+  };
+
+  const saveKidAssignments = ({ silent = false } = {}) => {
+    for (const kid of kids) {
+      const currentTeamIds = getTeamsForChild(kid.id).map((t) => t.id);
+      const next = kidIdsOnTeam.includes(kid.id)
+        ? [...new Set([...currentTeamIds, teamId])]
+        : currentTeamIds.filter((id) => id !== teamId);
+      setChildTeams(kid.id, next, { allowedTeamIds });
+    }
+    if (!silent) ctx.showToast(`Updated kids on ${team?.name || 'team'}`);
   };
 
   const minutesChips = (value, setter, options) => (
@@ -306,6 +336,50 @@ export function AddScheduleSource({ teamId, prefillUrl, ctx }) {
             drop-off + pick-up legs, and re-sync whenever you tap "Sync now".
           </div>
         </div>
+
+        {kids.length > 0 && (
+          <div className="card">
+            <div className="caps muted">Which kids are on this team?</div>
+            <div style={{ fontSize: 13, color: 'var(--gray-700)', marginTop: 4, marginBottom: 12 }}>
+              Add your kids to {team?.name || 'this team'} now so imported events and open rides
+              show up for the right children.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {kids.map((kid) => {
+                const on = kidIdsOnTeam.includes(kid.id);
+                return (
+                  <button
+                    key={kid.id}
+                    type="button"
+                    onClick={() => toggleKid(kid.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                      padding: '8px 11px',
+                      borderRadius: 999,
+                      border: on ? '1px solid var(--green-700)' : '1px solid var(--gray-300)',
+                      background: on ? 'var(--green-100)' : 'white',
+                      color: on ? 'var(--green-text)' : 'var(--gray-700)',
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {on ? '✓' : '+'} {kid.name}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ marginTop: 12, fontSize: 13 }}
+              onClick={() => saveKidAssignments()}
+            >
+              Save kid team assignments
+            </button>
+          </div>
+        )}
 
         {/* Quick presets */}
         <div className="card">

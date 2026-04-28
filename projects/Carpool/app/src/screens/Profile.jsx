@@ -14,8 +14,10 @@ import {
   setChildPhoto,
   getTeamsForChild,
   setChildTeams,
+  updateChildProfile,
 } from '../data/store.js';
 import { applyAutoClaimRules } from '../data/lifecycle.js';
+import { updateBackendChildTeams } from '../data/backendMutations.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { TopNav } from '../components/TopNav.jsx';
 import { compressImageToDataUrl } from '../lib/imageUtils.js';
@@ -90,6 +92,14 @@ export function Profile({ ctx, backendProfile }) {
                     </div>
                   )}
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: 'auto', padding: '8px 12px', fontSize: 13 }}
+                  onClick={() => ctx.navigate('kid_profile', { childId: k.id })}
+                >
+                  Edit
+                </button>
               </div>
               <KidTeamsRow kid={k} teams={teams} ctx={ctx} />
             </div>
@@ -289,6 +299,12 @@ function BackendProfileCard({ backendProfile, ctx }) {
                         : 'Not assigned to a team'}
                     </div>
                   </div>
+                  <BackendKidTeamsRow
+                    kid={kid}
+                    teams={teams}
+                    childTeams={childTeams}
+                    ctx={ctx}
+                  />
                 </div>
               );
             })
@@ -378,6 +394,177 @@ function BackendProfileCard({ backendProfile, ctx }) {
             })
           )}
         </div>
+      </div>
+    </>
+  );
+}
+
+function BackendKidTeamsRow({ kid, teams, childTeams, ctx }) {
+  const [busyTeamId, setBusyTeamId] = useState(null);
+  const assignedIds = childTeams
+    .filter((row) => row.child_id === kid.id)
+    .map((row) => row.team_id);
+  const allowedIds = teams.map((team) => team.id);
+
+  if (teams.length === 0) return null;
+
+  const toggle = async (teamId) => {
+    const isOn = assignedIds.includes(teamId);
+    const next = isOn
+      ? assignedIds.filter((id) => id !== teamId)
+      : [...assignedIds, teamId];
+    setBusyTeamId(teamId);
+    const result = await updateBackendChildTeams(kid.id, next, { allowedTeamIds: allowedIds });
+    setBusyTeamId(null);
+    if (result.ok) {
+      const team = teams.find((t) => t.id === teamId);
+      ctx.showToast(
+        isOn
+          ? `Removed ${kid.name.split(' ')[0]} from ${team?.name || 'team'}`
+          : `Added ${kid.name.split(' ')[0]} to ${team?.name || 'team'}`,
+      );
+      ctx.refreshBackendProfile?.();
+    } else {
+      ctx.showToast(`Could not update teams: ${result.reason}`);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {teams.map((team) => {
+        const on = assignedIds.includes(team.id);
+        return (
+          <button
+            key={team.id}
+            type="button"
+            disabled={busyTeamId === team.id}
+            onClick={() => toggle(team.id)}
+            style={{
+              padding: '5px 9px',
+              borderRadius: 999,
+              border: on ? '1px solid var(--green-700)' : '1px solid var(--gray-300)',
+              background: on ? 'var(--green-100)' : 'white',
+              color: on ? 'var(--green-text)' : 'var(--gray-700)',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {on ? '✓ ' : ''}
+            {team.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function KidProfile({ childId, ctx }) {
+  const me = getCurrentParent();
+  const kids = getKidsForParent(me.id);
+  const kid = kids.find((k) => k.id === childId);
+  const teams = getTeamsForParent(me.id);
+  const [draft, setDraft] = useState(() => ({
+    name: kid?.name || '',
+    school: kid?.school || '',
+    position: kid?.position || '',
+    age: kid?.age || '',
+  }));
+
+  if (!kid) {
+    return (
+      <>
+        <TopNav title="Kid profile" onBack={() => ctx.navigate('profile')} />
+        <div className="section">
+          <div className="card">Kid not found.</div>
+        </div>
+      </>
+    );
+  }
+
+  const save = () => {
+    updateChildProfile(kid.id, {
+      name: draft.name.trim() || kid.name,
+      school: draft.school.trim(),
+      position: draft.position.trim(),
+      age: Number(draft.age) || null,
+    });
+    ctx.showToast(`${draft.name.trim() || kid.name} updated`);
+    ctx.navigate('profile');
+  };
+
+  return (
+    <>
+      <TopNav title={kid.name} onBack={() => ctx.navigate('profile')} />
+      <div className="section">
+        <div className="card">
+          <div className="row" style={{ alignItems: 'center', marginBottom: 16 }}>
+            <PhotoEditableAvatar
+              name={kid.name}
+              color={kid.avatar_color}
+              photo={kid.photo}
+              size="lg"
+              onPick={(dataUrl) => {
+                setChildPhoto(kid.id, dataUrl);
+                ctx.showToast(dataUrl ? `Photo updated for ${kid.name}` : `Photo removed for ${kid.name}`);
+              }}
+            />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>Edit kid profile</div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Manage basics and team memberships.
+              </div>
+            </div>
+          </div>
+
+          <label className="field">Name</label>
+          <input
+            className="input"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">Age</label>
+          <input
+            className="input"
+            type="number"
+            inputMode="numeric"
+            value={draft.age ?? ''}
+            onChange={(e) => setDraft({ ...draft, age: e.target.value })}
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">School</label>
+          <input
+            className="input"
+            value={draft.school}
+            onChange={(e) => setDraft({ ...draft, school: e.target.value })}
+            placeholder="e.g. Lincoln Elementary"
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">Notes / position</label>
+          <input
+            className="input"
+            value={draft.position}
+            onChange={(e) => setDraft({ ...draft, position: e.target.value })}
+            placeholder="e.g. Pitcher, piano, pickup notes"
+          />
+        </div>
+
+        <div className="card">
+          <div className="caps muted" style={{ marginBottom: 8 }}>Teams</div>
+          <div style={{ fontSize: 13, color: 'var(--gray-700)', marginBottom: 10 }}>
+            Pick which teams this kid belongs to. Calendar events and open rides are filtered by
+            these assignments.
+          </div>
+          <KidTeamsRow kid={kid} teams={teams} ctx={ctx} />
+        </div>
+
+        <button type="button" className="btn btn-primary" onClick={save}>
+          Save kid profile
+        </button>
       </div>
     </>
   );

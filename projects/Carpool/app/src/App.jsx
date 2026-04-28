@@ -5,7 +5,7 @@ import { loadBackendProfile } from './data/backendBootstrap.js';
 import { Onboarding } from './screens/Onboarding.jsx';
 import { Today } from './screens/Today.jsx';
 import { Schedule } from './screens/Schedule.jsx';
-import { Profile } from './screens/Profile.jsx';
+import { KidProfile, Profile } from './screens/Profile.jsx';
 import { LegDetail } from './screens/LegDetail.jsx';
 import { NotificationsInbox } from './screens/NotificationsInbox.jsx';
 import { CreateGroup } from './screens/CreateGroup.jsx';
@@ -76,7 +76,19 @@ export default function App() {
     });
   }, []);
 
-  const ctx = { navigate, showToast };
+  const refreshBackendProfile = useCallback(() => {
+    loadBackendProfile()
+      .then((result) => setBackendProfile(result))
+      .catch((error) => {
+        setBackendProfile({
+          status: 'error',
+          data: null,
+          error: error.message || 'Could not load backend profile',
+        });
+      });
+  }, []);
+
+  const ctx = { navigate, showToast, refreshBackendProfile };
 
   if (!onboarded) {
     return (
@@ -104,6 +116,9 @@ export default function App() {
       break;
     case 'profile':
       screen = <Profile ctx={ctx} backendProfile={backendProfile} />;
+      break;
+    case 'kid_profile':
+      screen = <KidProfile childId={route.childId} ctx={ctx} />;
       break;
     case 'inbox':
       screen = <NotificationsInbox ctx={ctx} />;

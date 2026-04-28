@@ -320,6 +320,15 @@ export function getTeamsForChild(childId) {
   return data.teams.filter((t) => teamIds.includes(t.id));
 }
 
+export function updateChildProfile(childId, patch) {
+  const data = load();
+  const child = data.children.find((c) => c.id === childId);
+  if (!child) return null;
+  Object.assign(child, patch);
+  persist();
+  return child;
+}
+
 /**
  * Replace the full set of teams a child belongs to.
  *
