@@ -1,3 +1,9 @@
+// @ts-nocheck — this file targets Deno (Supabase Edge Runtime), not the
+// project's Node/TypeScript config. The `Deno` global, the `https://esm.sh/...`
+// import, and the `Deno.serve` signature are all valid at runtime. The
+// project's TypeScript checker doesn't know about Deno, so we suppress its
+// complaints here rather than maintaining a parallel tsconfig for one file.
+
 // =============================================================================
 // Supabase Edge Function: notify-team-leg-claimed
 //
@@ -52,7 +58,7 @@ interface RequestPayload {
   kind: 'claimed' | 'released';
 }
 
-function fmtTime(iso: string | null): string {
+function fmtTime(iso: string | null, timezone: string): string {
   if (!iso) return 'TBD';
   const d = new Date(iso);
   return d.toLocaleString('en-US', {
@@ -61,6 +67,8 @@ function fmtTime(iso: string | null): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: timezone,
+    timeZoneName: 'short',
   });
 }
 
@@ -209,6 +217,16 @@ Deno.serve(async (req) => {
     return json(404, { ok: false, reason: 'event_not_found' });
   }
 
+  // Per-team timezone is what we format event times in. Falls back to
+  // America/Chicago if the column is missing or null (e.g. on a project
+  // that hasn't applied migration 012 yet).
+  const { data: team } = await supabaseAdmin
+    .from('teams')
+    .select('timezone')
+    .eq('id', event.team_id)
+    .maybeSingle();
+  const teamTimezone = team?.timezone || 'America/Chicago';
+
   // Authorization: caller must belong to the leg's team.
   const { data: callerMembership, error: callerMembershipErr } = await supabaseAdmin
     .from('team_members')
@@ -247,7 +265,7 @@ Deno.serve(async (req) => {
     .select('id, auth_user_id, name')
     .in('id', recipientParentIds);
 
-  const eventTime = fmtTime(event.start_at);
+  const eventTime = fmtTime(event.start_at, teamTimezone);
   const subject = buildSubject(kind, callerParent.name, event.title);
   const appUrl = 'https://cursor-sdlc-workshop-eight.vercel.app';
   const { html, text } = buildBody({
