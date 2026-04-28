@@ -12,6 +12,10 @@ import {
 } from '../data/store.js';
 import { syncSource, fetchIcs } from '../data/lifecycle.js';
 import { parseIcs } from '../data/ics.js';
+import {
+  addBackendScheduleSource,
+  importBackendEvents,
+} from '../data/scheduleBackend.js';
 import { TopNav } from '../components/TopNav.jsx';
 
 /* ---------- helpers ---------- */
@@ -259,27 +263,81 @@ export function AddScheduleSource({ teamId, prefillUrl, ctx }) {
 
   const confirm = async () => {
     saveKidAssignments({ silent: true });
+    const sourceName = name.trim() || 'Imported schedule';
+    const sourceKind = mode === 'sample' ? 'sample' : 'webcal';
+    const sourceUrl = mode === 'url' ? url.trim() : null;
+    const defaultLegs = {
+      drop_off_minutes_before: dropEarly,
+      pick_up_minutes_after: pickLate,
+    };
+
     const src = addScheduleSource({
       team_id: teamId,
-      name: name.trim() || 'Imported schedule',
-      kind: mode === 'sample' ? 'sample' : 'webcal',
-      url: mode === 'url' ? url.trim() : null,
-      default_legs: {
-        drop_off_minutes_before: dropEarly,
-        pick_up_minutes_after: pickLate,
-      },
+      name: sourceName,
+      kind: sourceKind,
+      url: sourceUrl,
+      default_legs: defaultLegs,
     });
+
+    let localToast = null;
+    let localOk = false;
     try {
       const result = await syncSource(getSource(src.id));
       const parts = [];
       if (result.added) parts.push(`${result.added} events`);
       if (result.updated) parts.push(`${result.updated} updated`);
       if (result.removedPast) parts.push(`${result.removedPast} past removed`);
-      ctx.showToast(`Imported ${parts.join(' · ') || '0 events'} from ${src.name}`);
+      localToast = `Imported ${parts.join(' · ') || '0 events'} from ${src.name}`;
+      localOk = true;
+    } catch (e) {
+      localToast = `Saved feed but sync failed: ${e.message}`;
+    }
+
+    // Best-effort backend mirror. Never blocks local navigation; backend
+    // errors emit a separate toast so the local prototype stays usable
+    // when Supabase is unconfigured or the user isn't signed in.
+    const backendEvents = preview?.eligible || [];
+    let backendSuffix = '';
+    let backendFailureReason = null;
+    try {
+      const backendSourceResult = await addBackendScheduleSource({
+        teamId,
+        name: sourceName,
+        kind: sourceKind,
+        url: sourceUrl,
+        defaultLegs,
+      });
+
+      if (backendSourceResult.ok && backendSourceResult.source?.id) {
+        const importResult = await importBackendEvents(
+          backendSourceResult.source.id,
+          backendEvents,
+        );
+        if (importResult.ok) {
+          const c = importResult.counts || {};
+          const backendTotal =
+            (c.added || 0) + (c.updated || 0) + (c.cancelled || 0);
+          backendSuffix = ` · ${backendTotal} on Kinpala backend`;
+        } else if (!importResult.skipped) {
+          backendFailureReason = importResult.reason;
+        }
+      } else if (backendSourceResult.ok === false && !backendSourceResult.skipped) {
+        backendFailureReason = backendSourceResult.reason;
+      }
+    } catch (e) {
+      backendFailureReason = e.message;
+    }
+
+    if (localToast) {
+      ctx.showToast(`${localToast}${backendSuffix}`);
+    }
+    if (backendFailureReason) {
+      ctx.showToast(`Local sync OK, backend sync failed: ${backendFailureReason}`);
+    }
+
+    if (localOk) {
       ctx.navigate('schedule');
       return;
-    } catch (e) {
-      ctx.showToast(`Saved feed but sync failed: ${e.message}`);
     }
     ctx.navigate('schedule_sources', { teamId });
   };

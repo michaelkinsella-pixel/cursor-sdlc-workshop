@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getCurrentParent,
   getEventsForParent,
   getLegsForEvent,
 } from '../data/store.js';
+import { loadBackendScheduleEvents } from '../data/scheduleBackend.js';
 import { TopNav } from '../components/TopNav.jsx';
 import { SourceBadge } from '../components/SourceBadge.jsx';
 import { CalendarEmptyCTA } from '../components/CalendarEmptyCTA.jsx';
@@ -37,12 +38,57 @@ function dateLabel(iso) {
 
 export function Schedule({ ctx }) {
   const me = getCurrentParent();
-  const events = getEventsForParent(me.id);
+  const localEvents = getEventsForParent(me.id);
+
+  const [backend, setBackend] = useState({
+    status: 'loading',
+    backendEvents: [],
+    backendLegsByEvent: {},
+    error: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await loadBackendScheduleEvents();
+      if (cancelled) return;
+      if (result.ok) {
+        setBackend({
+          status: 'ready',
+          backendEvents: result.events || [],
+          backendLegsByEvent: result.legsByEvent || {},
+          error: null,
+        });
+      } else if (result.skipped) {
+        setBackend({
+          status: 'fallback',
+          backendEvents: [],
+          backendLegsByEvent: {},
+          error: null,
+        });
+      } else {
+        setBackend({
+          status: 'error',
+          backendEvents: [],
+          backendLegsByEvent: {},
+          error: result.reason || 'Unknown backend error',
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const useBackend = backend.status === 'ready';
+  const events = useBackend ? backend.backendEvents : localEvents;
+  const legsForEvent = (eventId) =>
+    useBackend ? backend.backendLegsByEvent[eventId] || [] : getLegsForEvent(eventId);
 
   const grouped = useMemo(() => {
     const map = new Map();
     for (const e of events) {
-      const k = e.start_at.slice(0, 10);
+      const k = (e.start_at || '').slice(0, 10);
       if (!map.has(k)) map.set(k, []);
       map.get(k).push(e);
     }
@@ -53,6 +99,25 @@ export function Schedule({ ctx }) {
     <>
       <TopNav title="Schedule" />
       <div className="section">
+        {useBackend && (
+          <div style={{ margin: '0 4px 8px' }}>
+            <span className="pill pill-green" style={{ fontSize: 11, letterSpacing: 0.3 }}>
+              Loaded from Kinpala backend
+            </span>
+          </div>
+        )}
+        {backend.status === 'error' && (
+          <div
+            className="card"
+            style={{
+              background: 'var(--red-50)',
+              color: 'var(--red-text)',
+              fontSize: 12,
+            }}
+          >
+            ⚠️ Backend schedule load failed: {backend.error} · showing local data.
+          </div>
+        )}
         {grouped.length === 0 && (
           <>
             <div className="empty">
@@ -68,9 +133,10 @@ export function Schedule({ ctx }) {
               {dateLabel(dayEvents[0].start_at)}
             </div>
             {dayEvents.map((e) => {
-              const legs = getLegsForEvent(e.id);
+              const legs = legsForEvent(e.id);
               const toLeg = legs.find((l) => l.direction === 'to_event');
               const fromLeg = legs.find((l) => l.direction === 'from_event');
+              const firstLegId = legs[0]?.id;
               return (
                 <button
                   key={e.id}
@@ -82,7 +148,8 @@ export function Schedule({ ctx }) {
                     textAlign: 'left',
                     padding: 14,
                   }}
-                  onClick={() => ctx.navigate('leg', { legId: legs[0].id })}
+                  onClick={() => firstLegId && ctx.navigate('leg', { legId: firstLegId })}
+                  disabled={!firstLegId}
                 >
                   <div className="row-between">
                     <div>
