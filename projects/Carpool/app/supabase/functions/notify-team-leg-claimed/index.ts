@@ -83,20 +83,42 @@ function buildSubject(
   return `${driverName} is now driving ${eventTitle}`;
 }
 
+function joinKidNames(names: string[]): string {
+  if (names.length === 0) return 'your kid';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
 function buildBody(args: {
   kind: 'claimed' | 'released';
   driverName: string;
   eventTitle: string;
   eventTime: string;
   direction: string;
+  recipientKidNames: string[];
+  allKidNames: string[];
   appUrl: string;
 }): { html: string; text: string } {
-  const { kind, driverName, eventTitle, eventTime, direction, appUrl } = args;
+  const {
+    kind,
+    driverName,
+    eventTitle,
+    eventTime,
+    direction,
+    recipientKidNames,
+    allKidNames,
+    appUrl,
+  } = args;
   const dirLabel = direction === 'to_event' ? 'drop-off' : 'pick-up';
+  const yourKids = joinKidNames(recipientKidNames);
+  const carriers = allKidNames.length
+    ? `Riders: ${allKidNames.join(', ')}.`
+    : '';
 
   if (kind === 'released') {
     const text = [
-      `Heads up: ${driverName} just released the ${dirLabel} for ${eventTitle} (${eventTime}).`,
+      `Heads up: ${driverName} just released the ${dirLabel} for ${eventTitle} (${eventTime}). ${yourKids} no longer has a confirmed driver.`,
       '',
       "It's now an open leg. Open Kinpala to claim it before someone else does, or volunteer in the team chat.",
       '',
@@ -105,22 +127,27 @@ function buildBody(args: {
     const html = `
       <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;color:#0F172A">
         <p>Heads up: <strong>${driverName}</strong> just released the <strong>${dirLabel}</strong> for <strong>${eventTitle}</strong> (${eventTime}).</p>
-        <p>It's now an open leg. Open Kinpala to claim it before someone else does, or volunteer in the team chat.</p>
+        <p><strong>${yourKids}</strong> no longer has a confirmed driver for this leg.</p>
         <p><a href="${appUrl}" style="color:#0F6B42;font-weight:700;text-decoration:none">Open Kinpala →</a></p>
       </div>`;
     return { html, text };
   }
 
   const text = [
-    `${driverName} is now driving the ${dirLabel} for ${eventTitle} (${eventTime}).`,
+    `${driverName} is now driving ${yourKids} to ${eventTitle} (${eventTime}).`,
+    carriers ? '' : null,
+    carriers || null,
     '',
     "You're covered. No action needed unless you want to coordinate further.",
     '',
     `${appUrl}`,
-  ].join('\n');
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
   const html = `
     <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;color:#0F172A">
-      <p><strong>${driverName}</strong> is now driving the <strong>${dirLabel}</strong> for <strong>${eventTitle}</strong> (${eventTime}).</p>
+      <p><strong>${driverName}</strong> is now driving <strong>${yourKids}</strong> to <strong>${eventTitle}</strong> (${eventTime}).</p>
+      ${carriers ? `<p style="color:#64748B;font-size:14px">${carriers}</p>` : ''}
       <p>You're covered. No action needed unless you want to coordinate further.</p>
       <p><a href="${appUrl}" style="color:#0F6B42;font-weight:700;text-decoration:none">Open Kinpala →</a></p>
     </div>`;
@@ -239,43 +266,80 @@ Deno.serve(async (req) => {
     return json(403, { ok: false, reason: 'caller_not_team_member' });
   }
 
-  // Recipients: every other team member with an auth_user_id (so we can
-  // resolve their email). Skip the caller themselves.
-  const { data: members, error: membersErr } = await supabaseAdmin
-    .from('team_members')
-    .select('parent_id')
-    .eq('team_id', event.team_id)
-    .is('removed_at', null);
-  if (membersErr) return json(500, { ok: false, reason: 'members_lookup_failed' });
+  // Audience: parents whose kids are SEATED IN THIS LEG. They're the ones
+  // whose kid is now riding with the new driver — that's a notification
+  // worth sending to a real inbox. Anyone else on the team can see the
+  // change live in the app via realtime; we don't need to add to inbox
+  // noise just because they happen to share a team. If the leg has no
+  // seats yet, no email goes out at all.
+  const { data: seats, error: seatsErr } = await supabaseAdmin
+    .from('seats')
+    .select('child_id')
+    .eq('leg_id', leg.id);
+  if (seatsErr) return json(500, { ok: false, reason: 'seats_lookup_failed' });
 
-  const recipientParentIds = (members || [])
-    .map((m) => m.parent_id)
-    .filter((id) => id && id !== callerParent.id);
+  const seatedChildIds = Array.from(
+    new Set((seats || []).map((s) => s.child_id).filter(Boolean)),
+  );
 
-  if (recipientParentIds.length === 0) {
+  if (seatedChildIds.length === 0) {
     return json(200, {
       ok: true,
       sent: 0,
-      reason: 'no_other_members',
+      reason: 'no_seated_kids',
     });
   }
 
-  const { data: recipientParents } = await supabaseAdmin
-    .from('parents')
-    .select('id, auth_user_id, name')
-    .in('id', recipientParentIds);
+  // Resolve which parents own those kids. parent_children is many-to-many
+  // so a co-parent on the team sees the email even if the seat was added
+  // by the other parent. Skip the caller; they don't need to email
+  // themselves about their own claim.
+  const { data: parentChildren, error: pcErr } = await supabaseAdmin
+    .from('parent_children')
+    .select('parent_id, child_id')
+    .in('child_id', seatedChildIds);
+  if (pcErr) return json(500, { ok: false, reason: 'parent_children_lookup_failed' });
+
+  const childIdsByParentId = new Map<string, Set<string>>();
+  for (const link of parentChildren || []) {
+    if (!link.parent_id || link.parent_id === callerParent.id) continue;
+    const set = childIdsByParentId.get(link.parent_id) ?? new Set();
+    set.add(link.child_id);
+    childIdsByParentId.set(link.parent_id, set);
+  }
+
+  if (childIdsByParentId.size === 0) {
+    return json(200, {
+      ok: true,
+      sent: 0,
+      reason: 'no_recipients_for_seated_kids',
+    });
+  }
+
+  // Pull child + parent metadata in parallel so we can name kids in the
+  // email body and resolve recipient emails.
+  const recipientParentIds = Array.from(childIdsByParentId.keys());
+  const [{ data: recipientParents }, { data: allChildren }] = await Promise.all([
+    supabaseAdmin
+      .from('parents')
+      .select('id, auth_user_id, name')
+      .in('id', recipientParentIds),
+    supabaseAdmin
+      .from('children')
+      .select('id, name')
+      .in('id', seatedChildIds),
+  ]);
+
+  const childNamesById = new Map<string, string>();
+  for (const c of allChildren || []) {
+    childNamesById.set(c.id, c.name || 'your kid');
+  }
+  const allKidNames = seatedChildIds
+    .map((id) => childNamesById.get(id))
+    .filter((name): name is string => Boolean(name));
 
   const eventTime = fmtTime(event.start_at, teamTimezone);
-  const subject = buildSubject(kind, callerParent.name, event.title);
   const appUrl = 'https://cursor-sdlc-workshop-eight.vercel.app';
-  const { html, text } = buildBody({
-    kind,
-    driverName: callerParent.name,
-    eventTitle: event.title,
-    eventTime,
-    direction: leg.direction,
-    appUrl,
-  });
 
   let sent = 0;
   const failures: Array<{ recipient: string; reason: string }> = [];
@@ -283,10 +347,29 @@ Deno.serve(async (req) => {
   for (const parent of recipientParents || []) {
     if (!parent.auth_user_id) continue;
 
+    const recipientChildIds = childIdsByParentId.get(parent.id);
+    if (!recipientChildIds || recipientChildIds.size === 0) continue;
+
+    const recipientKidNames = Array.from(recipientChildIds)
+      .map((id) => childNamesById.get(id))
+      .filter((name): name is string => Boolean(name));
+
     const { data: userRecord, error: userErr } = await supabaseAdmin.auth.admin.getUserById(
       parent.auth_user_id,
     );
     if (userErr || !userRecord?.user?.email) continue;
+
+    const subject = buildSubject(kind, callerParent.name, event.title);
+    const { html, text } = buildBody({
+      kind,
+      driverName: callerParent.name,
+      eventTitle: event.title,
+      eventTime,
+      direction: leg.direction,
+      recipientKidNames,
+      allKidNames,
+      appUrl,
+    });
 
     const result = await sendEmail({
       to: userRecord.user.email,
