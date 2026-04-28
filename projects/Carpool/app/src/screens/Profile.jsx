@@ -33,12 +33,21 @@ export function Profile({ ctx, backendProfile }) {
     getSourcesForTeam(t.id).map((s) => ({ ...s, _team: t })),
   );
 
+  // When the Kinpala backend has a real profile loaded, suppress the local
+  // prototype Profile sections (the second me-card, the "My kids" + "My
+  // teams" lists) — they duplicate what the BackendProfileCard already
+  // shows and cause confusion (Jessica seeing Mike's name, Mike seeing
+  // himself twice). Local-only mode (no Supabase, demo data) keeps the
+  // legacy rich UI.
+  const backendActive = backendProfile?.status === 'ready';
+
   return (
     <>
       <TopNav title="Profile" />
       <div className="section">
         <BackendProfileCard backendProfile={backendProfile} ctx={ctx} />
 
+        {!backendActive && (
         <div className="card">
           <div className="row" style={{ alignItems: 'center' }}>
             <PhotoEditableAvatar
@@ -60,11 +69,14 @@ export function Profile({ ctx, backendProfile }) {
             </div>
           </div>
         </div>
+        )}
 
         <CalendarFeedsSection teams={teams} sources={allSources} ctx={ctx} />
 
         <AutoClaimRulesSection me={me} teams={teams} ctx={ctx} />
 
+        {!backendActive && (
+        <>
         <div className="caps muted" style={{ margin: '16px 4px 8px' }}>My kids</div>
         {kids.map((k) => {
           const coParents = getCoParentsForChild(k.id).filter((p) => p.id !== me.id);
@@ -199,6 +211,8 @@ export function Profile({ ctx, backendProfile }) {
             </div>
           );
         })}
+        </>
+        )}
 
         <div className="caps muted" style={{ margin: '16px 4px 8px' }}>Settings</div>
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

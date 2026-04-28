@@ -1,10 +1,20 @@
 import { getSupabase, isSupabaseConfigured } from './supabase.js';
 
+// Resolve the authenticated parent specifically. RLS lets a parent SELECT
+// every other parent on a shared team (see policy parents_select_self_or_teammates
+// in 002), so a bare `select * from parents limit 1` returns whichever row
+// Postgres feels like — which is how Jessica's Profile was rendering Mike's
+// name at the top. Filtering on auth_user_id pins it to the caller.
 async function loadParent(supabase) {
+  const { data: userResult, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  const authUserId = userResult?.user?.id;
+  if (!authUserId) return null;
+
   const { data, error } = await supabase
     .from('parents')
     .select('*')
-    .limit(1)
+    .eq('auth_user_id', authUserId)
     .maybeSingle();
 
   if (error) throw error;
