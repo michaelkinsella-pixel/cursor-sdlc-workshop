@@ -309,15 +309,35 @@ function BackendProfileCard({ backendProfile, ctx }) {
                 .map((row) => row.team_id);
               const kidTeams = teams.filter((team) => kidTeamIds.includes(team.id));
               return (
-                <div key={kid.id} className="list-row">
-                  <Avatar name={kid.name} color={kid.avatar_color} photo={kid.photo_url} size="sm" />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{kid.name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {kidTeams.length
-                        ? kidTeams.map((team) => team.name).join(', ')
-                        : 'Not assigned to a team'}
+                <div
+                  key={kid.id}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    paddingTop: 8,
+                    paddingBottom: 8,
+                    borderBottom: '1px solid var(--gray-100)',
+                  }}
+                >
+                  <div className="list-row" style={{ borderBottom: 'none', padding: 0 }}>
+                    <Avatar name={kid.name} color={kid.avatar_color} photo={kid.photo_url} size="sm" />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{kid.name}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {kidTeams.length
+                          ? kidTeams.map((team) => team.name).join(', ')
+                          : 'Not assigned to a team'}
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: 'auto', padding: '6px 10px', fontSize: 12 }}
+                      onClick={() => ctx.navigate('kid_profile', { childId: kid.id })}
+                    >
+                      Edit
+                    </button>
                   </div>
                   <BackendKidTeamsRow
                     kid={kid}
@@ -482,7 +502,17 @@ function BackendKidTeamsRow({ kid, teams, childTeams, ctx }) {
 export function KidProfile({ childId, ctx }) {
   const me = getCurrentParent();
   const kids = getKidsForParent(me.id);
-  const kid = kids.find((k) => k.id === childId);
+  const localKid = kids.find((k) => k.id === childId);
+
+  // Same dispatcher pattern as LegDetail: try local, fall back to backend
+  // when the id is a Supabase UUID this prototype store doesn't know.
+  if (!localKid) {
+    return <BackendKidProfile childId={childId} ctx={ctx} />;
+  }
+  return <LocalKidProfile childId={childId} kid={localKid} me={me} ctx={ctx} />;
+}
+
+function LocalKidProfile({ childId: _childId, kid, me, ctx }) {
   const teams = getTeamsForParent(me.id);
   const [draft, setDraft] = useState(() => ({
     name: kid?.name || '',
@@ -490,17 +520,6 @@ export function KidProfile({ childId, ctx }) {
     position: kid?.position || '',
     age: kid?.age || '',
   }));
-
-  if (!kid) {
-    return (
-      <>
-        <TopNav title="Kid profile" onBack={() => ctx.navigate('profile')} />
-        <div className="section">
-          <div className="card">Kid not found.</div>
-        </div>
-      </>
-    );
-  }
 
   const save = () => {
     updateChildProfile(kid.id, {
@@ -586,6 +605,225 @@ export function KidProfile({ childId, ctx }) {
 
         <button type="button" className="btn btn-primary" onClick={save}>
           Save kid profile
+        </button>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Backend-mode KidProfile. Loads kid + co-parents + the caller's teams +
+ * child_teams from Supabase, lets the caller edit basics (name/age/school/
+ * position) directly via the children RLS update_own policy, manage team
+ * assignments, and manage co-parents. Skips photo upload (the local helper
+ * persists to localStorage and isn't backend-aware yet — fine to defer).
+ */
+function BackendKidProfile({ childId, ctx }) {
+  const [state, setState] = useState({ status: 'loading', data: null, reason: null });
+  const [draft, setDraft] = useState({ name: '', school: '', position: '', age: '' });
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    if (!isSupabaseConfigured()) {
+      setState({ status: 'unavailable', data: null, reason: 'not_configured' });
+      return;
+    }
+    const supabase = getSupabase();
+    const { data: userResult } = await supabase.auth.getUser();
+    const authUserId = userResult?.user?.id;
+    if (!authUserId) {
+      setState({ status: 'unavailable', data: null, reason: 'not_signed_in' });
+      return;
+    }
+
+    const { data: callerParent } = await supabase
+      .from('parents')
+      .select('id, name')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+    if (!callerParent) {
+      setState({ status: 'unavailable', data: null, reason: 'parent_not_found' });
+      return;
+    }
+
+    const { data: kid, error: kidErr } = await supabase
+      .from('children')
+      .select('id, name, age, avatar_color, photo_url, school, position')
+      .eq('id', childId)
+      .maybeSingle();
+    if (kidErr) {
+      setState({ status: 'error', data: null, reason: kidErr.message });
+      return;
+    }
+    if (!kid) {
+      setState({ status: 'not_found', data: null, reason: 'kid_not_found' });
+      return;
+    }
+
+    // Caller's team memberships, used to render KidTeamsRow with the
+    // teams the caller can manage assignments for.
+    const { data: memberships } = await supabase
+      .from('team_members')
+      .select('team_id')
+      .eq('parent_id', callerParent.id)
+      .is('removed_at', null);
+    const teamIds = (memberships || []).map((m) => m.team_id);
+    const { data: teams } = teamIds.length
+      ? await supabase.from('teams').select('*').in('id', teamIds)
+      : { data: [] };
+
+    const { data: childTeams } = await supabase
+      .from('child_teams')
+      .select('team_id, child_id')
+      .eq('child_id', kid.id);
+
+    setState({
+      status: 'ready',
+      data: { kid, teams: teams || [], childTeams: childTeams || [], callerParent },
+      reason: null,
+    });
+    setDraft({
+      name: kid.name || '',
+      school: kid.school || '',
+      position: kid.position || '',
+      age: kid.age ?? '',
+    });
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childId]);
+
+  if (state.status === 'loading') {
+    return (
+      <>
+        <TopNav title="Kid profile" onBack={() => ctx.navigate('profile')} />
+        <div className="muted" style={{ padding: 24, textAlign: 'center', fontSize: 13 }}>
+          Loading from Kinpala backend…
+        </div>
+      </>
+    );
+  }
+  if (state.status !== 'ready') {
+    return (
+      <>
+        <TopNav title="Kid profile" onBack={() => ctx.navigate('profile')} />
+        <div className="section">
+          <div className="card">
+            {state.status === 'not_found' && 'Kid not found.'}
+            {state.status === 'unavailable' && 'This kid is only viewable in backend mode.'}
+            {state.status === 'error' && `Could not load kid: ${state.reason}`}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const { kid, teams, childTeams } = state.data;
+
+  const save = async () => {
+    setBusy(true);
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from('children')
+      .update({
+        name: draft.name.trim() || kid.name,
+        school: draft.school.trim() || null,
+        position: draft.position.trim() || null,
+        age: draft.age === '' || draft.age === null ? null : Number(draft.age),
+      })
+      .eq('id', kid.id);
+    setBusy(false);
+    if (error) {
+      ctx.showToast(`Could not save: ${error.message}`);
+      return;
+    }
+    ctx.showToast(`${draft.name.trim() || kid.name} updated`);
+    ctx.refreshBackendProfile?.();
+    ctx.navigate('profile');
+  };
+
+  return (
+    <>
+      <TopNav title={kid.name} onBack={() => ctx.navigate('profile')} />
+      <div className="section">
+        <div style={{ margin: '0 4px 8px' }}>
+          <span className="pill pill-green" style={{ fontSize: 11, letterSpacing: 0.3 }}>
+            Loaded from Kinpala backend
+          </span>
+        </div>
+
+        <div className="card">
+          <div className="row" style={{ alignItems: 'center', marginBottom: 16 }}>
+            <Avatar name={kid.name} color={kid.avatar_color} photo={kid.photo_url} size="lg" />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>Edit kid profile</div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Manage basics, team memberships, and co-parents.
+              </div>
+            </div>
+          </div>
+
+          <label className="field">Name</label>
+          <input
+            className="input"
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">Age</label>
+          <input
+            className="input"
+            type="number"
+            inputMode="numeric"
+            value={draft.age ?? ''}
+            onChange={(e) => setDraft({ ...draft, age: e.target.value })}
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">School</label>
+          <input
+            className="input"
+            value={draft.school}
+            onChange={(e) => setDraft({ ...draft, school: e.target.value })}
+            placeholder="e.g. Lincoln Elementary"
+            style={{ marginBottom: 12 }}
+          />
+
+          <label className="field">Notes / position</label>
+          <input
+            className="input"
+            value={draft.position}
+            onChange={(e) => setDraft({ ...draft, position: e.target.value })}
+            placeholder="e.g. Pitcher, piano, pickup notes"
+          />
+        </div>
+
+        <div className="card">
+          <div className="caps muted" style={{ marginBottom: 8 }}>Teams</div>
+          <div style={{ fontSize: 13, color: 'var(--gray-700)', marginBottom: 10 }}>
+            Pick which teams this kid belongs to. Calendar events and open rides are filtered by
+            these assignments.
+          </div>
+          <BackendKidTeamsRow
+            kid={kid}
+            teams={teams}
+            childTeams={childTeams}
+            ctx={{ ...ctx, refreshBackendProfile: refresh }}
+          />
+        </div>
+
+        <CoparentManager childId={kid.id} childName={kid.name} ctx={ctx} />
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={save}
+          disabled={busy}
+        >
+          {busy ? 'Saving…' : 'Save kid profile'}
         </button>
       </div>
     </>
