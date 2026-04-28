@@ -33,6 +33,7 @@ import {
 import { capture } from '../data/analytics.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Sheet } from '../components/Sheet.jsx';
+import { userMessageForRpcReason } from '../lib/rpcUserMessage.js';
 
 /* ========================================================================
    Today / Home — redesigned around five principles:
@@ -631,11 +632,11 @@ export function Today({ ctx }) {
         ctx.showToast('Already claimed');
         refreshBackend();
       } else if (r.reason === 'not_found') {
-        ctx.showToast('Could not claim — leg not found');
+        ctx.showToast(userMessageForRpcReason('not_found'));
       } else if (r.reason === 'not_member') {
-        ctx.showToast('Could not claim — not a team member');
+        ctx.showToast(userMessageForRpcReason('not_member'));
       } else {
-        ctx.showToast(`Could not claim: ${r.reason || 'unknown error'}`);
+        ctx.showToast(userMessageForRpcReason(r.reason));
       }
     },
     [me.id, ctx, refreshBackend],
@@ -838,10 +839,10 @@ export function Today({ ctx }) {
                 console.warn('notifyTeamLegChange failed:', err),
               );
             } else if (r.reason === 'requires_emergency') {
-              ctx.showToast('Within 30 min — open this leg to mark it an emergency');
+              ctx.showToast(userMessageForRpcReason('requires_emergency'));
               ctx.navigate('leg', { legId: needSubLegId });
             } else {
-              ctx.showToast(`Could not open sub request: ${r.reason || 'unknown error'}`);
+              ctx.showToast(userMessageForRpcReason(r.reason));
             }
             return;
           }
@@ -922,11 +923,11 @@ export function Today({ ctx }) {
               const evtName = first.event.title;
               const reasonText = reason ? ` — ${reason.toLowerCase()}` : '';
               ctx.showToast(
-                `${kid} marked out for ${onDate} on ${evtName}${reasonText} (${r.seatsRemoved ?? 0} seat(s))`,
+                `${kid} marked out for ${onDate} on ${evtName}${reasonText} (${r.seatsRemoved ?? 0} ride leg${(r.seatsRemoved ?? 0) === 1 ? '' : 's'})`,
               );
               refreshBackend();
             } else {
-              ctx.showToast(`Could not update: ${r.reason || 'unknown error'}`);
+              ctx.showToast(userMessageForRpcReason(r.reason));
             }
             return;
           }
@@ -994,7 +995,7 @@ export function Today({ ctx }) {
             } else if (r.reason === 'already_seated') {
               ctx.showToast(`${row.kid.name} is already in this carpool`);
             } else {
-              ctx.showToast(`Could not add: ${r.reason || 'unknown error'}`);
+              ctx.showToast(userMessageForRpcReason(r.reason));
             }
             return;
           }
@@ -2684,7 +2685,7 @@ function KidOutSheet({ open, onClose, rows, onRemove }) {
                   {pickedGroup.legs
                     .map((l) => (l.direction === 'to_event' ? 'drop-off' : 'pick-up'))
                     .join(' + ')}{' '}
-                  ({pickedGroup.legs.length} seat{pickedGroup.legs.length === 1 ? '' : 's'})
+                  ({pickedGroup.legs.length} ride leg{pickedGroup.legs.length === 1 ? '' : 's'})
                 </div>
               </div>
             </div>
@@ -2733,7 +2734,7 @@ function KidOutSheet({ open, onClose, rows, onRemove }) {
                 style={{ marginTop: 14 }}
                 onClick={() => onRemove(pickedGroup.legs.map((l) => ({ ...pickedGroup, leg: l })), reason)}
               >
-                Pull {pickedGroup.child.name} from {pickedGroup.legs.length} seat
+                Pull {pickedGroup.child.name} from {pickedGroup.legs.length} ride leg
                 {pickedGroup.legs.length === 1 ? '' : 's'}
               </button>
             )}

@@ -17,7 +17,7 @@ import {
   updateChildProfile,
 } from '../data/store.js';
 import { applyAutoClaimRules } from '../data/lifecycle.js';
-import { updateBackendChildTeams } from '../data/backendMutations.js';
+import { updateBackendChildTeams, updateBackendParentProfile } from '../data/backendMutations.js';
 import {
   addCoparentToChild,
   loadShareableTeammates,
@@ -27,6 +27,7 @@ import { getSupabase, isSupabaseConfigured } from '../data/supabase.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { TopNav } from '../components/TopNav.jsx';
 import { compressImageToDataUrl } from '../lib/imageUtils.js';
+import { userMessageForDataError } from '../lib/rpcUserMessage.js';
 
 export function Profile({ ctx, backendProfile }) {
   const me = getCurrentParent();
@@ -241,6 +242,109 @@ export function Profile({ ctx, backendProfile }) {
   );
 }
 
+function BackendParentSelfEdit({ parent, ctx }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(parent.name);
+  const [phone, setPhone] = useState(parent.phone || '');
+  const [seats, setSeats] = useState(String(parent.default_seats ?? 4));
+  const [saving, setSaving] = useState(false);
+
+  const beginEdit = () => {
+    setName(parent.name);
+    setPhone(parent.phone || '');
+    setSeats(String(parent.default_seats ?? 4));
+    setOpen(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const r = await updateBackendParentProfile({
+      name,
+      phone,
+      default_seats: seats,
+    });
+    setSaving(false);
+    if (r.ok) {
+      setOpen(false);
+      ctx.showToast('Profile saved');
+      ctx.refreshBackendProfile?.();
+    } else {
+      const msg =
+        r.reason === 'Name is required.' ? r.reason : userMessageForDataError(r.reason);
+      ctx.showToast(msg);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--gray-100)' }}>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 8, lineHeight: 1.4 }}>
+          Default seats when you claim a leg:{' '}
+          <strong>{parent.default_seats ?? 4}</strong>
+        </div>
+        <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={beginEdit}>
+          Edit my profile
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--gray-100)' }}>
+      <div className="caps muted" style={{ marginBottom: 8 }}>Edit profile</div>
+      <label className="field">Name</label>
+      <input
+        className="input"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        autoComplete="name"
+        style={{ marginBottom: 10 }}
+      />
+      <label className="field">Phone (optional)</label>
+      <input
+        className="input"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        autoComplete="tel"
+        inputMode="tel"
+        placeholder="+1…"
+        style={{ marginBottom: 10 }}
+      />
+      <label className="field">Default seats in your car</label>
+      <input
+        className="input"
+        type="number"
+        min={1}
+        max={15}
+        inputMode="numeric"
+        value={seats}
+        onChange={(e) => setSeats(e.target.value)}
+        style={{ marginBottom: 12 }}
+      />
+      <div className="row" style={{ gap: 8 }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ flex: 1 }}
+          disabled={saving}
+          onClick={() => save()}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ flex: 1 }}
+          disabled={saving}
+          onClick={() => setOpen(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BackendProfileCard({ backendProfile, ctx }) {
   if (!backendProfile || backendProfile.status === 'unconfigured') return null;
 
@@ -295,6 +399,8 @@ function BackendProfileCard({ backendProfile, ctx }) {
             </div>
           </div>
         </div>
+
+        <BackendParentSelfEdit parent={parent} ctx={ctx} />
 
         <div style={{ marginTop: 14, borderTop: '1px solid var(--gray-100)', paddingTop: 12 }}>
           <div className="caps muted" style={{ marginBottom: 8 }}>
@@ -465,7 +571,7 @@ function BackendKidTeamsRow({ kid, teams, childTeams, ctx }) {
       );
       ctx.refreshBackendProfile?.();
     } else {
-      ctx.showToast(`Could not update teams: ${result.reason}`);
+      ctx.showToast(`Could not update teams: ${userMessageForDataError(result.reason)}`);
     }
   };
 

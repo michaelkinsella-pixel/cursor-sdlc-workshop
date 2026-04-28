@@ -11,11 +11,13 @@ import { acceptSubRequest } from '../data/lifecycle.js';
 import {
   acceptSubRequestBackend,
   loadBackendSubRequestDetail,
+  notifyTeamLegChange,
 } from '../data/operationalBackend.js';
 import { isSupabaseConfigured } from '../data/supabase.js';
 import { capture } from '../data/analytics.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { TopNav } from '../components/TopNav.jsx';
+import { userMessageForRpcReason } from '../lib/rpcUserMessage.js';
 
 function fmt(iso) {
   const d = new Date(iso);
@@ -146,13 +148,16 @@ export function SubResponse({ subRequestId, ctx }) {
       const r = await acceptSubRequestBackend(subRequestId);
       if (r.ok) {
         capture('sub_request_response_received', { sub_request_id: subRequestId, backend: true });
+        notifyTeamLegChange(leg.id, 'claimed').catch((err) =>
+          console.warn('notifyTeamLegChange failed:', err),
+        );
         ctx.showToast(`You're now driving — ${requester?.name?.split(' ')[0] || 'They'} were notified`);
         ctx.navigate('leg', { legId: leg.id });
       } else if (r.reason === 'closed' || r.reason === 'taken') {
         ctx.showToast('Already filled — sorry!');
         ctx.navigate('today');
       } else {
-        ctx.showToast(`Could not accept: ${r.reason || 'unknown error'}`);
+        ctx.showToast(userMessageForRpcReason(r.reason));
       }
       return;
     }

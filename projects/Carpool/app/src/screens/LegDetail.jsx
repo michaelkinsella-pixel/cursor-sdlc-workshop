@@ -36,6 +36,7 @@ import { Toggle } from '../components/Toggle.jsx';
 import { Stepper } from '../components/Stepper.jsx';
 import { TopNav } from '../components/TopNav.jsx';
 import { SourceBadge } from '../components/SourceBadge.jsx';
+import { userMessageForDataError, userMessageForRpcReason } from '../lib/rpcUserMessage.js';
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -705,10 +706,10 @@ function BackendLegDetail({ legId, ctx }) {
       );
       refresh();
     } else if (result.reason === 'taken') {
-      ctx.showToast('Already claimed by someone else');
+      ctx.showToast(userMessageForRpcReason('taken'));
       refresh();
     } else {
-      ctx.showToast(`Could not claim: ${result.reason || 'unknown error'}`);
+      ctx.showToast(userMessageForRpcReason(result.reason));
     }
   };
 
@@ -720,7 +721,7 @@ function BackendLegDetail({ legId, ctx }) {
       ctx.showToast('Leg released — anyone can claim it now');
       refresh();
     } else {
-      ctx.showToast(`Could not release: ${result.reason || 'unknown error'}`);
+      ctx.showToast(userMessageForRpcReason(result.reason));
     }
   };
 
@@ -732,9 +733,9 @@ function BackendLegDetail({ legId, ctx }) {
       ctx.showToast(`${kid.name} added to this ride`);
       refresh();
     } else if (result.reason === 'full') {
-      ctx.showToast('This car is full — no seats left');
+      ctx.showToast(userMessageForRpcReason('full'));
     } else {
-      ctx.showToast(`Could not add ${kid.name}: ${result.reason || 'unknown error'}`);
+      ctx.showToast(userMessageForRpcReason(result.reason));
     }
   };
 
@@ -746,7 +747,7 @@ function BackendLegDetail({ legId, ctx }) {
       ctx.showToast(`${kid.name} removed from this ride`);
       refresh();
     } else {
-      ctx.showToast(`Could not remove ${kid.name}: ${result.reason || 'unknown error'}`);
+      ctx.showToast(userMessageForDataError(result.reason));
     }
   };
 
@@ -767,9 +768,11 @@ function BackendLegDetail({ legId, ctx }) {
       );
       refresh();
     } else if (result.reason === 'requires_emergency') {
-      ctx.showToast('Too close to departure — contact your team or use emergency options.');
+      ctx.showToast(userMessageForRpcReason('requires_emergency'));
+    } else if (result.reason === 'sub_already_open') {
+      ctx.showToast(userMessageForRpcReason('sub_already_open'));
     } else {
-      ctx.showToast(`Could not open sub request: ${result.reason || 'unknown error'}`);
+      ctx.showToast(userMessageForRpcReason(result.reason));
     }
   };
 

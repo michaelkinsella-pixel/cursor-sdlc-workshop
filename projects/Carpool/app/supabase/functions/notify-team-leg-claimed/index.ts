@@ -133,6 +133,27 @@ function buildBody(args: {
     return { html, text };
   }
 
+  // Claimed leg but this recipient has no seated kids on the leg (e.g. they
+  // opened a sub, pulled their kid out, and someone else claimed — still
+  // worth a clear inbox nudge).
+  if (kind === 'claimed' && recipientKidNames.length === 0) {
+    const text = [
+      `${driverName} picked up the ${dirLabel} for ${eventTitle} (${eventTime}).`,
+      '',
+      'You had asked for coverage on this leg — it now has a confirmed driver.',
+      '',
+      `${appUrl}`,
+    ].join('\n');
+    const html = `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;color:#0F172A">
+        <p><strong>${driverName}</strong> picked up the <strong>${dirLabel}</strong> for <strong>${eventTitle}</strong> (${eventTime}).</p>
+        <p>You had asked for coverage on this leg — it now has a confirmed driver.</p>
+        ${carriers ? `<p style="color:#64748B;font-size:14px">${carriers}</p>` : ''}
+        <p><a href="${appUrl}" style="color:#0F6B42;font-weight:700;text-decoration:none">Open Kinpala →</a></p>
+      </div>`;
+    return { html, text };
+  }
+
   const text = [
     `${driverName} is now driving ${yourKids} to ${eventTitle} (${eventTime}).`,
     carriers ? '' : null,
@@ -266,12 +287,10 @@ Deno.serve(async (req) => {
     return json(403, { ok: false, reason: 'caller_not_team_member' });
   }
 
-  // Audience: parents whose kids are SEATED IN THIS LEG. They're the ones
-  // whose kid is now riding with the new driver — that's a notification
-  // worth sending to a real inbox. Anyone else on the team can see the
-  // change live in the app via realtime; we don't need to add to inbox
-  // noise just because they happen to share a team. If the leg has no
-  // seats yet, no email goes out at all.
+  // Primary audience: parents whose kids are seated on this leg (skip the
+  // caller — they don't email themselves). For `claimed`, also include the
+  // parent who most recently had an accepted sub_request on this leg so
+  // they still get a message after pulling their kid out (no seat rows left).
   const { data: seats, error: seatsErr } = await supabaseAdmin
     .from('seats')
     .select('child_id')
@@ -282,53 +301,64 @@ Deno.serve(async (req) => {
     new Set((seats || []).map((s) => s.child_id).filter(Boolean)),
   );
 
-  if (seatedChildIds.length === 0) {
-    return json(200, {
-      ok: true,
-      sent: 0,
-      reason: 'no_seated_kids',
-    });
+  const childIdsByParentId = new Map<string, Set<string>>();
+
+  if (seatedChildIds.length > 0) {
+    const { data: parentChildren, error: pcErr } = await supabaseAdmin
+      .from('parent_children')
+      .select('parent_id, child_id')
+      .in('child_id', seatedChildIds);
+    if (pcErr) return json(500, { ok: false, reason: 'parent_children_lookup_failed' });
+
+    for (const link of parentChildren || []) {
+      if (!link.parent_id || link.parent_id === callerParent.id) continue;
+      const set = childIdsByParentId.get(link.parent_id) ?? new Set();
+      set.add(link.child_id);
+      childIdsByParentId.set(link.parent_id, set);
+    }
   }
 
-  // Resolve which parents own those kids. parent_children is many-to-many
-  // so a co-parent on the team sees the email even if the seat was added
-  // by the other parent. Skip the caller; they don't need to email
-  // themselves about their own claim.
-  const { data: parentChildren, error: pcErr } = await supabaseAdmin
-    .from('parent_children')
-    .select('parent_id, child_id')
-    .in('child_id', seatedChildIds);
-  if (pcErr) return json(500, { ok: false, reason: 'parent_children_lookup_failed' });
-
-  const childIdsByParentId = new Map<string, Set<string>>();
-  for (const link of parentChildren || []) {
-    if (!link.parent_id || link.parent_id === callerParent.id) continue;
-    const set = childIdsByParentId.get(link.parent_id) ?? new Set();
-    set.add(link.child_id);
-    childIdsByParentId.set(link.parent_id, set);
+  if (kind === 'claimed') {
+    const { data: latestAccepted, error: srErr } = await supabaseAdmin
+      .from('sub_requests')
+      .select('requested_by')
+      .eq('leg_id', leg.id)
+      .eq('status', 'accepted')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!srErr && latestAccepted?.requested_by && latestAccepted.requested_by !== callerParent.id) {
+      const rb = latestAccepted.requested_by;
+      if (!childIdsByParentId.has(rb)) {
+        childIdsByParentId.set(rb, new Set());
+      }
+    }
   }
 
   if (childIdsByParentId.size === 0) {
     return json(200, {
       ok: true,
       sent: 0,
-      reason: 'no_recipients_for_seated_kids',
+      reason: seatedChildIds.length === 0 ? 'no_seated_kids' : 'no_recipients_for_seated_kids',
     });
   }
 
   // Pull child + parent metadata in parallel so we can name kids in the
   // email body and resolve recipient emails.
   const recipientParentIds = Array.from(childIdsByParentId.keys());
-  const [{ data: recipientParents }, { data: allChildren }] = await Promise.all([
+  const [{ data: recipientParents }, childrenResult] = await Promise.all([
     supabaseAdmin
       .from('parents')
       .select('id, auth_user_id, name')
       .in('id', recipientParentIds),
-    supabaseAdmin
-      .from('children')
-      .select('id, name')
-      .in('id', seatedChildIds),
+    seatedChildIds.length > 0
+      ? supabaseAdmin.from('children').select('id, name').in('id', seatedChildIds)
+      : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null }),
   ]);
+  if (childrenResult.error) {
+    return json(500, { ok: false, reason: 'children_lookup_failed' });
+  }
+  const allChildren = childrenResult.data;
 
   const childNamesById = new Map<string, string>();
   for (const c of allChildren || []) {
@@ -348,7 +378,8 @@ Deno.serve(async (req) => {
     if (!parent.auth_user_id) continue;
 
     const recipientChildIds = childIdsByParentId.get(parent.id);
-    if (!recipientChildIds || recipientChildIds.size === 0) continue;
+    if (!recipientChildIds) continue;
+    if (recipientChildIds.size === 0 && kind !== 'claimed') continue;
 
     const recipientKidNames = Array.from(recipientChildIds)
       .map((id) => childNamesById.get(id))

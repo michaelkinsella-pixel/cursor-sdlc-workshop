@@ -20,6 +20,7 @@ import {
 import { TopNav } from '../components/TopNav.jsx';
 import { Avatar } from '../components/Avatar.jsx';
 import { CalendarEmptyCTA } from '../components/CalendarEmptyCTA.jsx';
+import { userMessageForRpcReason } from '../lib/rpcUserMessage.js';
 
 const HORIZON_DAYS = 21;
 
@@ -145,11 +146,11 @@ export function OpenShifts({ ctx }) {
         ctx.showToast('Already claimed');
         refreshBackend();
       } else if (r.reason === 'not_found') {
-        ctx.showToast('Could not claim — leg not found');
+        ctx.showToast(userMessageForRpcReason('not_found'));
       } else if (r.reason === 'not_member') {
-        ctx.showToast('Could not claim — not a team member');
+        ctx.showToast(userMessageForRpcReason('not_member'));
       } else {
-        ctx.showToast(`Could not claim: ${r.reason || 'unknown error'}`);
+        ctx.showToast(userMessageForRpcReason(r.reason));
       }
     },
     [me.id, ctx, refreshBackend],

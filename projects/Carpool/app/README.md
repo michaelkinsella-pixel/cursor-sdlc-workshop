@@ -5,6 +5,10 @@ Mobile-viewport React web app that demonstrates the Phase 1, 2, and 3 flows from
 ported to React Native + Expo with Supabase when ready to ship to phones —
 the data layer in `src/data/` mirrors the Supabase schema 1:1.
 
+## Pilot (real parents)
+
+See **[docs/PILOT.md](./docs/PILOT.md)** for deploy checklist, Supabase auth URL configuration, invite/join verification, a short parent playbook, and where to read logs (Edge Functions, Resend, API).
+
 ## Run it
 
 ```bash
