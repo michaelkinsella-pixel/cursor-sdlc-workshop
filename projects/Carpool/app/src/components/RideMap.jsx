@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { prepareGooglePolylineOverlay } from '../lib/decodeGooglePolyline.js';
 
 /**
  * Real interactive map for the Active Ride screen.
  *
  * Uses Leaflet + OpenStreetMap tiles (no API key, free, attributed).
  * Renders one pin per stop in the pickup order plus a separate
- * "driver" pin for the current position. A polyline connects the
- * stops in order so it reads as a route at a glance.
+ * "driver" pin for the current position.
  *
- * Pins are custom HTML (DivIcon) so we can label them with numbers
- * and color them by state (next/current/completed) without juggling
- * Leaflet's default marker image assets.
+ * When `encodedPolyline` is set (from Google Directions via Edge), draws the
+ * road-following route (decoded safely, decimated for performance); otherwise
+ * a dashed straight line connects geocoded stops.
  */
 
 function pinIcon({ label, color = 'var(--green-700)', textColor = 'white', size = 30 }) {
@@ -74,28 +74,46 @@ function FitBounds({ points }) {
   return null;
 }
 
-export function RideMap({ stops, driverPos, height = 240 }) {
+/**
+ * @param {object} props
+ * @param {Array<{ lat?: number, lng?: number, id?: string, label?: string, state?: string }>} props.stops
+ * @param {{ lat?: number, lng?: number } | null} props.driverPos
+ * @param {number} [props.height]
+ * @param {string | null | undefined} props.encodedPolyline — Google overview polyline (Directions API)
+ */
+export function RideMap({ stops, driverPos, height = 240, encodedPolyline = null }) {
   const validStops = useMemo(
     () => stops.filter((s) => s && Number.isFinite(s.lat) && Number.isFinite(s.lng)),
     [stops],
   );
 
+  const roadOverlay = useMemo(
+    () => prepareGooglePolylineOverlay(encodedPolyline || null),
+    [encodedPolyline],
+  );
+  const roadRoute = roadOverlay.positions;
+
   const allPoints = useMemo(() => {
-    const pts = [...validStops];
+    const pts = [...validStops.map((s) => ({ lat: s.lat, lng: s.lng }))];
+    if (roadRoute.length >= 2) {
+      for (const [lat, lng] of roadRoute) {
+        pts.push({ lat, lng });
+      }
+    }
     if (driverPos && Number.isFinite(driverPos.lat) && Number.isFinite(driverPos.lng)) {
-      pts.push(driverPos);
+      pts.push({ lat: driverPos.lat, lng: driverPos.lng });
     }
     return pts;
-  }, [validStops, driverPos]);
+  }, [validStops, driverPos, roadRoute]);
 
-  // First stop fallback if we don't have any points (shouldn't happen if caller checked)
-  const center = allPoints[0] || { lat: 41.751, lng: -88.153 };
-  const polyline = validStops.map((s) => [s.lat, s.lng]);
+  const center = validStops[0] || { lat: 41.751, lng: -88.153 };
+  const stopToStopLine = validStops.map((s) => [s.lat, s.lng]);
 
-  // Force a remount when the number of stops changes — Leaflet
-  // doesn't reconcile new layers added after init as cleanly as a
-  // fresh map for our small use case.
-  const keyRef = useRef(0);
+  const mapInstanceKey = useMemo(() => {
+    const stopKey = validStops.map((s) => s.id ?? `${s.lat},${s.lng}`).join('|');
+    const polyKey = encodedPolyline ? String(encodedPolyline.length) : '0';
+    return `${stopKey}__${polyKey}`;
+  }, [validStops, encodedPolyline]);
 
   return (
     <div
@@ -107,7 +125,7 @@ export function RideMap({ stops, driverPos, height = 240 }) {
       }}
     >
       <MapContainer
-        key={keyRef.current}
+        key={mapInstanceKey}
         center={[center.lat, center.lng]}
         zoom={13}
         scrollWheelZoom={false}
@@ -117,11 +135,24 @@ export function RideMap({ stops, driverPos, height = 240 }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
-        {polyline.length >= 2 && (
+        {roadRoute.length >= 2 ? (
           <Polyline
-            positions={polyline}
-            pathOptions={{ color: '#1b4332', weight: 4, opacity: 0.7, dashArray: '6 8' }}
+            positions={roadRoute}
+            pathOptions={{
+              color: '#1d4ed8',
+              weight: 5,
+              opacity: 0.88,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
           />
+        ) : (
+          stopToStopLine.length >= 2 && (
+            <Polyline
+              positions={stopToStopLine}
+              pathOptions={{ color: '#1b4332', weight: 4, opacity: 0.55, dashArray: '6 8' }}
+            />
+          )
         )}
         {validStops.map((s, i) => (
           <Marker

@@ -6,12 +6,16 @@
  *      (zero network, always works, looks geographically realistic
  *      because all points are in the same Naperville, IL cluster)
  *   2. localStorage cache from prior Nominatim lookups
- *   3. OpenStreetMap Nominatim API (free, no key, ~1 req/sec)
- *   4. null  → caller should hide the map / drop the pin gracefully
+ *   3. When Supabase is configured, Supabase Edge `geocode-address` (Google)
+ *      with the user's JWT — keys stay server-side.
+ *   4. OpenStreetMap Nominatim API (free, no key, ~1 req/sec)
+ *   5. null  → caller should hide the map / drop the pin gracefully
  *
- * In production this would be replaced by a real geocoder (Google
- * Places / Mapbox) keyed on a server-side proxy.
+ * In production, prefer the Edge path (see `geocode-address` function).
  */
+
+import { isSupabaseConfigured } from './supabase.js';
+import { fetchGeocodeAddressEdge } from './operationalBackend.js';
 
 const CACHE_KEY = 'carpool.geocode.v1';
 
@@ -77,6 +81,17 @@ let lastNominatimAt = 0;
 export async function geocodeAddress(address) {
   const fast = lookupAddress(address);
   if (fast) return fast;
+
+  if (isSupabaseConfigured()) {
+    const edge = await fetchGeocodeAddressEdge(address);
+    if (edge.ok && Number.isFinite(edge.lat) && Number.isFinite(edge.lng)) {
+      const out = { lat: edge.lat, lng: edge.lng, label: edge.label || address };
+      const cache = loadCache();
+      cache[address] = out;
+      saveCache(cache);
+      return out;
+    }
+  }
 
   const wait = Math.max(0, 1100 - (Date.now() - lastNominatimAt));
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));

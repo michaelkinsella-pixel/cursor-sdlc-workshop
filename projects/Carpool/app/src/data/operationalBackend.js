@@ -70,6 +70,8 @@ export async function loadBackendOperationalState() {
       legs: [],
       seats: [],
       parents: [],
+      parentChildren: [],
+      seatChildren: [],
       myChildren: [],
       subRequests: [],
       subResponseCounts: {},
@@ -96,6 +98,8 @@ export async function loadBackendOperationalState() {
       legs: [],
       seats: [],
       parents: [],
+      parentChildren: [],
+      seatChildren: [],
       myChildren: [],
       subRequests: [],
       subResponseCounts: {},
@@ -121,19 +125,33 @@ export async function loadBackendOperationalState() {
     seatList = seatRows || [];
   }
 
-  // Other drivers besides the auth parent — deduped, non-null.
-  // The auth parent is already loaded above so we don't re-fetch them.
-  const driverIds = Array.from(
-    new Set(legList.map((l) => l.driver_id).filter((id) => id && id !== parent.id)),
-  );
-  let driverList = [];
-  if (driverIds.length > 0) {
-    const { data: drivers, error: driversError } = await supabase
+  const { data: teamMemberRows, error: tmErr } = await supabase
+    .from('team_members')
+    .select('parent_id')
+    .in('team_id', teamIds)
+    .is('removed_at', null);
+  if (tmErr) return { ok: false, reason: tmErr.message };
+  const teamParentIds = [...new Set((teamMemberRows || []).map((r) => r.parent_id).filter(Boolean))];
+
+  let parentsList = [];
+  if (teamParentIds.length > 0) {
+    const { data: plist, error: pListErr } = await supabase
       .from('parents')
-      .select('id, name, phone, avatar_color, photo_url')
-      .in('id', driverIds);
-    if (driversError) return { ok: false, reason: driversError.message };
-    driverList = drivers || [];
+      .select('*')
+      .in('id', teamParentIds);
+    if (pListErr) return { ok: false, reason: pListErr.message };
+    parentsList = plist || [];
+  }
+
+  const seatedChildIds = [...new Set(seatList.map((s) => s.child_id).filter(Boolean))];
+  let parentChildrenForSeats = [];
+  if (seatedChildIds.length > 0) {
+    const { data: pcSeatRows, error: pcSeatErr } = await supabase
+      .from('parent_children')
+      .select('parent_id, child_id')
+      .in('child_id', seatedChildIds);
+    if (pcSeatErr) return { ok: false, reason: pcSeatErr.message };
+    parentChildrenForSeats = pcSeatRows || [];
   }
 
   const { data: childLinks, error: clErr } = await supabase
@@ -150,6 +168,16 @@ export async function loadBackendOperationalState() {
       .in('id', myChildIds);
     if (kidsErr) return { ok: false, reason: kidsErr.message };
     myChildren = kids || [];
+  }
+
+  let seatChildren = [];
+  if (seatedChildIds.length > 0) {
+    const { data: seatChildRows, error: scErr } = await supabase
+      .from('children')
+      .select('*')
+      .in('id', seatedChildIds);
+    if (scErr) return { ok: false, reason: scErr.message };
+    seatChildren = seatChildRows || [];
   }
 
   let subRequests = [];
@@ -190,7 +218,9 @@ export async function loadBackendOperationalState() {
     events: eventList,
     legs: legList,
     seats: seatList,
-    parents: driverList,
+    parents: parentsList,
+    parentChildren: parentChildrenForSeats,
+    seatChildren,
     myChildren,
     subRequests,
     subResponseCounts,
@@ -266,6 +296,36 @@ export async function notifyTeamLegChange(legId, kind) {
 }
 
 /**
+ * Server-side driving time / distance for a leg (Google Directions via Edge).
+ * Requires GOOGLE_MAPS_API_KEY on the compute-leg-route function.
+ */
+export async function fetchLegRouteEstimate(legId) {
+  const session = await getSessionResult();
+  if (!session.ok) return session;
+
+  const { data, error } = await session.supabase.functions.invoke('compute-leg-route', {
+    body: { legId },
+  });
+  if (error) return { ok: false, reason: error.message };
+  return { ok: true, ...data };
+}
+
+/**
+ * Server-side geocode (Google Geocoding via Edge). Used when Supabase is on.
+ */
+export async function fetchGeocodeAddressEdge(address) {
+  const session = await getSessionResult();
+  if (!session.ok) return session;
+
+  const { data, error } = await session.supabase.functions.invoke('geocode-address', {
+    body: { address },
+  });
+  if (error) return { ok: false, reason: error.message };
+  if (!data?.ok) return { ok: false, reason: data?.reason || 'geocode_failed' };
+  return { ok: true, lat: data.lat, lng: data.lng, label: data.label };
+}
+
+/**
  * Load the bag of state the LegDetail screen needs from Supabase:
  *   - the leg + its event
  *   - current driver (if any)
@@ -314,7 +374,7 @@ export async function loadBackendLegDetail(legId) {
   if (leg.driver_id) {
     const { data: driverData } = await supabase
       .from('parents')
-      .select('id, name, phone, avatar_color, photo_url')
+      .select('id, name, phone, avatar_color, photo_url, home_address')
       .eq('id', leg.driver_id)
       .maybeSingle();
     driver = driverData || null;
@@ -332,6 +392,32 @@ export async function loadBackendLegDetail(legId) {
       .select('id, name, age, avatar_color, photo_url')
       .in('id', childIds);
     seatedKids = data || [];
+  }
+
+  let parentChildrenLinks = [];
+  if (childIds.length > 0) {
+    const { data: pcRows, error: pcErr } = await supabase
+      .from('parent_children')
+      .select('parent_id, child_id')
+      .in('child_id', childIds);
+    if (pcErr) return { ok: false, reason: pcErr.message };
+    parentChildrenLinks = pcRows || [];
+  }
+
+  const relatedParentIdSet = new Set(parentChildrenLinks.map((r) => r.parent_id).filter(Boolean));
+  if (leg.driver_id) relatedParentIdSet.add(leg.driver_id);
+  const relatedParentIds = [...relatedParentIdSet];
+  let relatedParentsById = {};
+  if (relatedParentIds.length > 0) {
+    const { data: relParents, error: rpErr } = await supabase
+      .from('parents')
+      .select('*')
+      .in('id', relatedParentIds);
+    if (rpErr) return { ok: false, reason: rpErr.message };
+    relatedParentsById = Object.fromEntries((relParents || []).map((p) => [p.id, p]));
+    if (leg.driver_id && relatedParentsById[leg.driver_id]) {
+      driver = relatedParentsById[leg.driver_id];
+    }
   }
 
   const { data: myLinks } = await supabase
@@ -357,6 +443,8 @@ export async function loadBackendLegDetail(legId) {
     seats: seats || [],
     seatedKids,
     myKids,
+    parentChildrenLinks,
+    relatedParentsById,
   };
 }
 

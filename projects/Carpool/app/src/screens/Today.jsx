@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   getCurrentParent,
   getEventsByDate,
@@ -29,11 +29,15 @@ import {
   openSubRequestForLegBackend,
   markChildAbsenceBackend,
   seatKidBackend,
+  fetchLegRouteEstimate,
 } from '../data/operationalBackend.js';
 import { capture } from '../data/analytics.js';
+import { isSupabaseConfigured } from '../data/supabase.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Sheet } from '../components/Sheet.jsx';
 import { userMessageForRpcReason } from '../lib/rpcUserMessage.js';
+import { buildMapsDeepLinks } from '../lib/mapsDeepLinks.js';
+import { buildOrderedMapAddressesLocal, buildOrderedMapAddressesFromLookups } from '../lib/mapsStopPlan.js';
 
 /* ========================================================================
    Today / Home — redesigned around five principles:
@@ -266,9 +270,16 @@ function buildBackendLookups(backend) {
   if (backend.parent) parentsById.set(backend.parent.id, normalizeParent(backend.parent));
   for (const p of backend.parents || []) parentsById.set(p.id, normalizeParent(p));
 
+  const parentChildren = backend.parentChildren || [];
+
   const childrenById = new Map();
   const myChildren = backend.myChildren || [];
-  for (const c of myChildren) {
+  const seatChildren = backend.seatChildren || [];
+  const childRows = [...myChildren, ...seatChildren];
+  const seenChild = new Set();
+  for (const c of childRows) {
+    if (!c?.id || seenChild.has(c.id)) continue;
+    seenChild.add(c.id);
     childrenById.set(c.id, { ...c, photo: c.photo || c.photo_url });
   }
 
@@ -292,6 +303,7 @@ function buildBackendLookups(backend) {
     parent: backend.parent || null,
     events: backend.events || [],
     legs: backend.legs || [],
+    parentChildren,
   };
 }
 
@@ -1116,12 +1128,57 @@ function SBCol({ label, value, tone }) {
 function NextDriveCard({ leg, ctx, meId, onSub, onLate, lookups }) {
   const event = getEventBE(leg.event_id, lookups);
   const kids = getKidsInLegBE(leg.id, lookups);
-  // buildStopChain reads parent_children + per-parent home_address out
-  // of the local store, neither of which we load in backend mode this
-  // slice — so the route mini-timeline is omitted in that case.
   const chain = useMemo(() => (lookups ? null : buildStopChain(leg)), [leg, lookups]);
   const inProgress = leg.status === 'in_progress';
   const isToEvent = leg.direction === 'to_event';
+  const enRouteOnce = useRef(false);
+  useEffect(() => {
+    enRouteOnce.current = false;
+  }, [leg.id]);
+
+  const mapLinks = useMemo(() => {
+    const addresses = lookups
+      ? buildOrderedMapAddressesFromLookups(leg, event, lookups)
+      : buildOrderedMapAddressesLocal(leg, event);
+    return addresses.length ? buildMapsDeepLinks(addresses) : null;
+  }, [leg, event, lookups]);
+
+  const [routeEst, setRouteEst] = useState(null);
+  useEffect(() => {
+    let c = false;
+    if (!isSupabaseConfigured() || !lookups) {
+      setRouteEst(null);
+      return () => {
+        c = true;
+      };
+    }
+    fetchLegRouteEstimate(leg.id).then((r) => {
+      if (c) return;
+      if (!r.ok || r.skipped || !r.segments?.length) {
+        setRouteEst(null);
+        return;
+      }
+      setRouteEst(r);
+    });
+    return () => {
+      c = true;
+    };
+  }, [leg.id, lookups]);
+
+  const openMaps = (which) => {
+    if (!mapLinks) {
+      const fb = encodeURIComponent(leg.departure_location || event?.location || '');
+      window.open(`https://maps.apple.com/?daddr=${fb}&dirflg=d`, '_blank');
+    } else {
+      const url = which === 'apple' ? mapLinks.appleUrl : mapLinks.googleUrl;
+      if (url) window.open(url, '_blank');
+    }
+    if (!enRouteOnce.current) {
+      postRideStatus(leg.id, meId, 'en_route');
+      enRouteOnce.current = true;
+      ctx.showToast('Status sent: on your way');
+    }
+  };
 
   return (
     <div style={{ margin: '0 16px 14px' }}>
@@ -1192,16 +1249,21 @@ function NextDriveCard({ leg, ctx, meId, onSub, onLate, lookups }) {
           </div>
 
           {chain ? <RouteMini chain={chain} /> : null}
+          {routeEst && routeEst.totalDurationSeconds > 0 && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.4 }}>
+              About {Math.round(routeEst.totalDurationSeconds / 60)} min drive
+              {isToEvent && event?.start_at
+                ? ` · aim to leave by ${fmtTime(
+                    new Date(new Date(event.start_at).getTime() - routeEst.totalDurationSeconds * 1000 - 5 * 60 * 1000).toISOString(),
+                  )} (5 min buffer)`
+                : ''}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button
               type="button"
-              onClick={() => {
-                const addr = encodeURIComponent(leg.departure_location || event?.location || '');
-                window.open(`https://maps.apple.com/?daddr=${addr}`, '_blank');
-                postRideStatus(leg.id, meId, 'en_route');
-                ctx.showToast('Status sent: on your way');
-              }}
+              onClick={() => openMaps('apple')}
               style={{
                 flex: 1,
                 background: 'var(--green-700)',
@@ -1209,15 +1271,35 @@ function NextDriveCard({ leg, ctx, meId, onSub, onLate, lookups }) {
                 border: 'none',
                 borderRadius: 12,
                 padding: 12,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 800,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 6,
+                gap: 4,
               }}
             >
-              🧭 Start route
+              Apple Maps
+            </button>
+            <button
+              type="button"
+              onClick={() => openMaps('google')}
+              style={{
+                flex: 1,
+                background: 'var(--green-900)',
+                color: 'white',
+                border: 'none',
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 13,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+              }}
+            >
+              Google Maps
             </button>
             {inProgress ? (
               <button
@@ -1253,6 +1335,14 @@ function NextDriveCard({ leg, ctx, meId, onSub, onLate, lookups }) {
               </button>
             )}
           </div>
+
+          {mapLinks?.truncated ? (
+            <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.35 }}>
+              Map links list the first {mapLinks.includedStopCount} of {mapLinks.totalStopCount} stops
+              (long URLs break on some phones). Use <strong>Open ride mode</strong> below for the full
+              stop list on the in-app map.
+            </div>
+          ) : null}
 
           <button
             type="button"

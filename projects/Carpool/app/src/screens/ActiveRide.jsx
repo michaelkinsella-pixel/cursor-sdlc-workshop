@@ -8,6 +8,11 @@ import {
 } from '../data/store.js';
 import { postRideStatus } from '../data/lifecycle.js';
 import { lookupAddress, geocodeAddress } from '../data/geocode.js';
+import { loadBackendLegDetail, fetchLegRouteEstimate } from '../data/operationalBackend.js';
+import { isSupabaseConfigured } from '../data/supabase.js';
+import { buildActiveRideStopsFromLegDetail } from '../lib/mapsStopPlan.js';
+import { buildGoogleDrivingSegmentUrl } from '../lib/mapsDeepLinks.js';
+import { prepareGooglePolylineOverlay, polylineDecodeUserMessage } from '../lib/decodeGooglePolyline.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { RideMap } from '../components/RideMap.jsx';
 import { TopNav } from '../components/TopNav.jsx';
@@ -67,20 +72,109 @@ function buildStops(leg, event) {
   ];
 }
 
+function isLikelyUuid(id) {
+  return (
+    typeof id === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  );
+}
+
 /* ---------- screen ---------- */
 
 export function ActiveRide({ legId, ctx }) {
   const data = db();
-  const leg = data.carpool_legs.find((l) => l.id === legId);
-  const event = leg ? getEvent(leg.event_id) : null;
-  const me = leg ? getParent(leg.driver_id) : null;
+  const localLeg = data.carpool_legs.find((l) => l.id === legId);
+  const localEvent = localLeg ? getEvent(localLeg.event_id) : null;
 
-  const stops = useMemo(() => (leg && event ? buildStops(leg, event) : []), [leg, event]);
+  const [backendDetail, setBackendDetail] = useState(null);
+  const [backendMode, setBackendMode] = useState('idle'); // idle|loading|ready|local
+
+  useEffect(() => {
+    let cancelled = false;
+    const d = db();
+    const ll = d.carpool_legs.find((l) => l.id === legId);
+    const ev = ll ? getEvent(ll.event_id) : null;
+    if (ll && ev) {
+      setBackendDetail(null);
+      setBackendMode('local');
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!isSupabaseConfigured() || !isLikelyUuid(legId)) {
+      setBackendDetail(null);
+      setBackendMode('local');
+      return () => {
+        cancelled = true;
+      };
+    }
+    setBackendMode('loading');
+    loadBackendLegDetail(legId).then((r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        setBackendDetail(r);
+        setBackendMode('ready');
+      } else {
+        setBackendDetail(null);
+        setBackendMode('local');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [legId]);
+
+  const leg = localLeg ?? backendDetail?.leg ?? null;
+  const event = localEvent ?? backendDetail?.event ?? null;
+  const me =
+    leg && backendMode === 'ready' && backendDetail?.driver
+      ? backendDetail.driver
+      : leg
+        ? getParent(leg.driver_id)
+        : null;
+
+  const stops = useMemo(() => {
+    if (!leg || !event) return [];
+    if (backendMode === 'ready' && backendDetail) {
+      return buildActiveRideStopsFromLegDetail(backendDetail);
+    }
+    return buildStops(leg, event);
+  }, [leg, event, backendMode, backendDetail]);
 
   // Index of the next stop the driver hasn't completed yet.
   const [currentIdx, setCurrentIdx] = useState(0);
   const [phase, setPhase] = useState('before_start'); // 'before_start' | 'driving' | 'complete'
   const [lateOpen, setLateOpen] = useState(false);
+  const [routeEst, setRouteEst] = useState(null);
+
+  useEffect(() => {
+    setCurrentIdx(0);
+    setPhase('before_start');
+  }, [legId, leg?.id]);
+
+  useEffect(() => {
+    if (backendMode !== 'ready' || !leg?.id || !isSupabaseConfigured()) {
+      setRouteEst(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchLegRouteEstimate(leg.id).then((r) => {
+      if (cancelled) return;
+      if (!r.ok || r.skipped || !r.segments?.length) {
+        setRouteEst(null);
+        return;
+      }
+      setRouteEst(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [backendMode, leg?.id]);
+
+  const routeLineMeta = useMemo(
+    () => prepareGooglePolylineOverlay(routeEst?.encodedPolyline || null),
+    [routeEst?.encodedPolyline],
+  );
 
   // Trigger a one-time async geocode for any stops the sync lookup
   // missed (e.g. user-typed addresses for one-off carpools). We just
@@ -109,6 +203,17 @@ export function ActiveRide({ legId, ctx }) {
     };
   }, [stops]);
 
+  if (backendMode === 'loading') {
+    return (
+      <>
+        <TopNav title="Ride" onBack={() => ctx.navigate('today')} />
+        <div className="muted" style={{ padding: 24, textAlign: 'center', fontSize: 13 }}>
+          Loading ride from Kinpala backend…
+        </div>
+      </>
+    );
+  }
+
   if (!leg || !event) {
     return (
       <>
@@ -117,6 +222,20 @@ export function ActiveRide({ legId, ctx }) {
           <div className="empty">
             <div className="icon">🚗</div>
             <div className="h3">Couldn't load this ride</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!me?.id) {
+    return (
+      <>
+        <TopNav title="Ride" onBack={() => ctx.navigate('today')} />
+        <div className="section">
+          <div className="empty">
+            <div className="icon">🚗</div>
+            <div className="h3">No driver assigned</div>
           </div>
         </div>
       </>
@@ -245,16 +364,57 @@ export function ActiveRide({ legId, ctx }) {
             {stops.filter((s) => s.kind === 'pickup' || s.kind === 'dropoff').length === 1 ? '' : 's'} ·{' '}
             {leg.departure_location} → {leg.arrival_location}
           </div>
+          {routeEst && routeEst.totalDurationSeconds > 0 && (
+            <div style={{ fontSize: 12, opacity: 0.9, marginTop: 8 }}>
+              About {Math.round(routeEst.totalDurationSeconds / 60)} min total drive
+              {leg.direction === 'to_event' && event?.start_at
+                ? ` · leave by ~${fmtTime(
+                    new Date(
+                      new Date(event.start_at).getTime() - routeEst.totalDurationSeconds * 1000 - 5 * 60 * 1000,
+                    ).toISOString(),
+                  )} for 5 min buffer`
+                : ''}
+            </div>
+          )}
         </div>
 
-        {/* Map */}
-        <RideMap stops={stopsWithState} driverPos={driverPos} height={260} />
+        {/* Map — road path from Google Directions when Supabase routing returns a polyline */}
+        <div>
+          <RideMap
+            stops={stopsWithState}
+            driverPos={driverPos}
+            height={260}
+            encodedPolyline={routeEst?.encodedPolyline || null}
+          />
+          {routeEst?.encodedPolyline ? (
+            <div className="muted" style={{ fontSize: 10, marginTop: 6, lineHeight: 1.45 }}>
+              {routeLineMeta.error ? (
+                <>
+                  Couldn’t draw the blue route ({polylineDecodeUserMessage(routeLineMeta.error)}). The dashed
+                  line shows stop order. Map tiles © OpenStreetMap.
+                </>
+              ) : routeLineMeta.decimated ? (
+                <>
+                  Blue line follows Google directions ({routeLineMeta.sourcePointCount.toLocaleString()} points
+                  simplified for smooth scrolling). Map tiles © OpenStreetMap.
+                </>
+              ) : (
+                <>Blue line follows driving directions from Google. Map tiles © OpenStreetMap.</>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         {/* Stops list */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {stopsWithState.map((s, i) => {
             const isCurrent = i === currentIdx && phase === 'driving';
             const isDone = i < currentIdx;
+            const nextStop = stopsWithState[i + 1];
+            const segmentUrl =
+              i < stopsWithState.length - 1 ? buildGoogleDrivingSegmentUrl(s, nextStop) : null;
+            const isActiveLeg =
+              isCurrent && phase === 'driving' && i < stopsWithState.length - 1 && segmentUrl;
             return (
               <div
                 key={s.id}
@@ -298,20 +458,53 @@ export function ActiveRide({ legId, ctx }) {
                   <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                     {s.address || 'TBD'}
                   </div>
+                  {routeEst?.segments?.[i]?.durationSeconds > 0 && i < stopsWithState.length - 1 && (
+                    <div style={{ fontSize: 11, opacity: 0.75, marginTop: 4 }}>
+                      ~{Math.round(routeEst.segments[i].durationSeconds / 60)} min to next stop
+                    </div>
+                  )}
                 </div>
-                {s.parent?.phone && (
-                  <a
-                    href={`tel:${s.parent.phone}`}
-                    className="btn btn-ghost"
-                    style={{ width: 'auto', padding: '6px 10px', fontSize: 16 }}
-                    aria-label={`Call ${s.parent.name}`}
-                  >
-                    📞
-                  </a>
-                )}
-                {s.kid && (
-                  <Avatar name={s.kid.name} color={s.kid.avatar_color} photo={s.kid.photo} size="sm" />
-                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: 6,
+                    flexShrink: 0,
+                  }}
+                >
+                  {segmentUrl ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{
+                        width: 'auto',
+                        padding: '6px 10px',
+                        fontSize: isActiveLeg ? 12 : 11,
+                        fontWeight: isActiveLeg ? 800 : 600,
+                        border: isActiveLeg ? '2px solid var(--green-700)' : undefined,
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={() => window.open(segmentUrl, '_blank', 'noopener,noreferrer')}
+                      aria-label="Open driving directions from this stop to the next in Google Maps"
+                    >
+                      {isActiveLeg ? 'Open leg in Google' : 'Google → next'}
+                    </button>
+                  ) : null}
+                  {s.parent?.phone && (
+                    <a
+                      href={`tel:${s.parent.phone}`}
+                      className="btn btn-ghost"
+                      style={{ width: 'auto', padding: '6px 10px', fontSize: 16 }}
+                      aria-label={`Call ${s.parent.name}`}
+                    >
+                      📞
+                    </a>
+                  )}
+                  {s.kid && (
+                    <Avatar name={s.kid.name} color={s.kid.avatar_color} photo={s.kid.photo_url || s.kid.photo} size="sm" />
+                  )}
+                </div>
               </div>
             );
           })}

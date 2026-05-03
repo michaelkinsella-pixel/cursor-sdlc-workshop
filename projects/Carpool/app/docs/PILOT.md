@@ -2,6 +2,8 @@
 
 Use this checklist before inviting a small group of real parents. It covers **deploy**, **auth**, **joining a team**, a short **parent playbook**, and **where to look when something breaks**.
 
+For a **repeatable production cut** (ordered Supabase + Vercel steps) and a **numbered smoke script on the live URL**, use **[Production deploy & smoke](./PRODUCTION_DEPLOY_AND_SMOKE.md)** and run it before every pilot wave or material infra change.
+
 ---
 
 ## 1. Deploy (lock this first)
@@ -10,10 +12,13 @@ Use this checklist before inviting a small group of real parents. It covers **de
 
 1. **Project** — Use one dedicated Supabase project for the pilot (not your personal scratch project unless everyone agrees).
 2. **Migrations** — Apply every SQL file under `migrations/` **in numeric order** on that project (`001` … `015`, etc.). The app assumes this schema + RLS + RPCs exist.
-3. **Edge Functions** — Deploy functions from `supabase/functions/` (at minimum `notify-team-leg-claimed` if you rely on claim/release/sub emails).
+3. **Edge Functions** — Deploy functions from `supabase/functions/` (at minimum `notify-team-leg-claimed` if you rely on claim/release/sub emails). For **multi-stop maps and drive-time hints** on Today / Leg detail / Active ride, also deploy:
+   - `compute-leg-route` — builds ordered stops for a leg, geocodes them server-side, calls **Google Directions** (JSON), returns segment durations and an optional polyline. The API key never ships to the browser.
+   - `geocode-address` — single-address geocode via **Google Geocoding** when the app runs in Supabase mode (replaces client-side Nominatim for production).
 4. **Secrets** — In Supabase → Project Settings → Edge Functions → Secrets, set at least:
    - `RESEND_API_KEY`
    - `RESEND_FROM` (must match a verified sender/domain in Resend)
+   - **`GOOGLE_MAPS_API_KEY`** — required for `compute-leg-route` and `geocode-address` (enable **Directions API** and **Geocoding API** on the same Google Cloud project; keep the key server-only in Edge secrets).
 5. **Redeploy functions** after changing function code (emails will not update until you do).
 
 ### Front end (Vercel or similar)
@@ -30,6 +35,7 @@ Use this checklist before inviting a small group of real parents. It covers **de
 - [ ] RLS enabled on public tables (see `002_rls_policies.sql`)  
 - [ ] Edge secrets set; test email received after a claim (optional but strongly recommended)  
 - [ ] Vercel env points at the same project you migrated  
+- [ ] **[Production deploy & smoke](./PRODUCTION_DEPLOY_AND_SMOKE.md)** completed on the **production URL** (or waivers documented there) before inviting parents
 
 ---
 
@@ -72,6 +78,8 @@ RPCs such as `find_team_by_invite_code` and `complete_onboarding` must be grante
 **What to expect**
 
 - Updates are **live** when the app is open (Supabase Realtime). Email is a backup for some coverage changes (after Edge Function deploy + Resend setup).
+- **Maps** — Drivers see **Apple Maps** and **Google Maps** buttons with the full ordered stop list (your home → passenger homes → venue, or the reverse for pick-up legs). **Google** supports more waypoints in one URL; **Apple Maps** uses repeated destinations and may differ slightly on very long routes. On iPhone, Apple Maps is often the default choice; **Google Maps** is a reliable fallback (especially on Android). Very large carpools may **cap stops in external links** (first ten addresses) so URLs stay reliable; the in-app **ride** map still lists every stop, and with Supabase routing it can show a **road-following line** from Google Directions on top of OpenStreetMap tiles.
+- **Drive time** — When Supabase and the routing Edge function are configured, the app may show an approximate **total drive time** and a **“leave by”** hint for drop-off legs (event start minus drive time minus a small buffer). Times are indicative (traffic varies); follow local rules and your own judgment.
 - **“Ride legs”** — One practice with drop-off and pick-up counts as **two legs** (two assignments), not necessarily two physical seats in one car.
 
 **If something looks wrong**
@@ -106,3 +114,4 @@ When reporting a bug, capture: **user**, **time (with timezone)**, **team**, **l
 - Export feedback themes (confusing copy, failed flows, missing profile fields).  
 - Triage: **data fixes** (SQL) vs **product fixes** (app changes).  
 - Re-run the deploy checklist for any new migration or function before rolling out again.
+- Re-run **[Production deploy & smoke](./PRODUCTION_DEPLOY_AND_SMOKE.md)** (at least Parts D–E4) on the live URL after infra changes.

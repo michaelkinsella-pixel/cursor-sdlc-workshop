@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getCurrentParent,
   getLeg,
@@ -29,6 +29,7 @@ import {
   seatKidBackend,
   subscribeToCarpoolLegs,
   unseatKidBackend,
+  fetchLegRouteEstimate,
 } from '../data/operationalBackend.js';
 import { Avatar } from '../components/Avatar.jsx';
 import { Sheet } from '../components/Sheet.jsx';
@@ -37,6 +38,9 @@ import { Stepper } from '../components/Stepper.jsx';
 import { TopNav } from '../components/TopNav.jsx';
 import { SourceBadge } from '../components/SourceBadge.jsx';
 import { userMessageForDataError, userMessageForRpcReason } from '../lib/rpcUserMessage.js';
+import { buildMapsDeepLinks } from '../lib/mapsDeepLinks.js';
+import { buildOrderedMapAddressesFromLegDetail, buildOrderedMapAddressesLocal } from '../lib/mapsStopPlan.js';
+import { isSupabaseConfigured } from '../data/supabase.js';
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -80,6 +84,10 @@ function LocalLegDetail({ leg, event, me, ctx }) {
   );
   const isDriver = leg.driver_id === me.id;
   const isCancelled = leg.status === 'cancelled';
+  const mapLinksLocal = useMemo(() => {
+    const addresses = buildOrderedMapAddressesLocal(leg, event);
+    return addresses.length ? buildMapsDeepLinks(addresses) : null;
+  }, [leg, event]);
   const openSub = getOpenSubRequestForLeg(leg.id);
 
   return (
@@ -174,6 +182,32 @@ function LocalLegDetail({ leg, event, me, ctx }) {
           )}
           {isDriver && !isCancelled && (
             <div style={{ marginTop: 12 }}>
+              {mapLinksLocal && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => mapLinksLocal.appleUrl && window.open(mapLinksLocal.appleUrl, '_blank')}
+                  >
+                    Apple Maps
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => mapLinksLocal.googleUrl && window.open(mapLinksLocal.googleUrl, '_blank')}
+                  >
+                    Google Maps
+                  </button>
+                </div>
+              )}
+              {mapLinksLocal?.truncated ? (
+                <div className="muted" style={{ fontSize: 11, marginBottom: 10, lineHeight: 1.35 }}>
+                  Links include the first {mapLinksLocal.includedStopCount} of {mapLinksLocal.totalStopCount}{' '}
+                  stops (URL safety cap).
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={() => ctx.navigate('active_ride', { legId: leg.id })}
@@ -628,6 +662,7 @@ function BackendLegDetail({ legId, ctx }) {
   const [busy, setBusy] = useState(false);
   const [subSheetOpen, setSubSheetOpen] = useState(false);
   const [subReason, setSubReason] = useState('');
+  const [routeEst, setRouteEst] = useState(null);
 
   const refresh = async () => {
     const result = await loadBackendLegDetail(legId);
@@ -665,6 +700,30 @@ function BackendLegDetail({ legId, ctx }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, legId]);
 
+  useEffect(() => {
+    if (state.status !== 'ready' || !state.data || !isSupabaseConfigured()) {
+      setRouteEst(null);
+      return undefined;
+    }
+    const { leg: l, parent: p } = state.data;
+    if (l.driver_id !== p.id) {
+      setRouteEst(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetchLegRouteEstimate(l.id).then((r) => {
+      if (cancelled) return;
+      if (!r.ok || r.skipped || !r.segments?.length) {
+        setRouteEst(null);
+        return;
+      }
+      setRouteEst(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.status, state.data?.leg?.id, state.data?.parent?.id, state.data?.leg?.driver_id]);
+
   if (state.status === 'loading') {
     return (
       <>
@@ -694,6 +753,11 @@ function BackendLegDetail({ legId, ctx }) {
   const isCancelled = leg.status === 'cancelled';
   const myKidsInLeg = seatedKids.filter((k) => myKids.some((mk) => mk.id === k.id));
   const seatableMyKids = myKids.filter((mk) => !seatedKids.some((sk) => sk.id === mk.id));
+
+  const mapLinks = useMemo(() => {
+    const addresses = buildOrderedMapAddressesFromLegDetail(state.data);
+    return addresses.length ? buildMapsDeepLinks(addresses) : null;
+  }, [state.data]);
 
   const claimHere = async () => {
     setBusy(true);
@@ -864,6 +928,48 @@ function BackendLegDetail({ legId, ctx }) {
             </div>
           )}
         </div>
+
+        {isDriver && !isCancelled && mapLinks && (
+          <div className="card">
+            <div className="caps muted">Navigate</div>
+            {routeEst && routeEst.totalDurationSeconds > 0 && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 8, lineHeight: 1.45 }}>
+                About {Math.round(routeEst.totalDurationSeconds / 60)} min total drive
+                {leg.direction === 'to_event' && event?.start_at
+                  ? ` · aim to leave by ${fmtTime(
+                      new Date(
+                        new Date(event.start_at).getTime() - routeEst.totalDurationSeconds * 1000 - 5 * 60 * 1000,
+                      ).toISOString(),
+                    )} (5 min buffer)`
+                  : ''}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => mapLinks.appleUrl && window.open(mapLinks.appleUrl, '_blank')}
+              >
+                Apple Maps
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => mapLinks.googleUrl && window.open(mapLinks.googleUrl, '_blank')}
+              >
+                Google Maps
+              </button>
+            </div>
+            {mapLinks.truncated ? (
+              <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.35 }}>
+                Links include the first {mapLinks.includedStopCount} of {mapLinks.totalStopCount} stops (URL
+                cap). Open <strong>Ride</strong> from Today for the full ordered list in the app.
+              </div>
+            ) : null}
+          </div>
+        )}
 
         {/* Passengers */}
         <div className="card">
